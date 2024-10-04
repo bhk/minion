@@ -23,6 +23,6 @@ are:
   by disabling its implicit rules, which are unneeded, given Minion's
   functionality.
 
-[Example Walk-Through](example.md)
+[Walk-Through](demo.md)
 
 [Reference](minion.md)

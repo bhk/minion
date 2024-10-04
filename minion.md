@@ -154,7 +154,7 @@ somewhat elaborate and multifacted, but ultimately a function -- that yields
 a set of property definitions.  An instance identifies the function (class)
 and its inputs (argument list).
 
-### "Simple" Definitions
+### Simple and Recursive Variables
 
 Make supports two "flavors" of variables, "simple" (using `:=`) and
 "recursive" (using `=`).  The above discussion assumes that properties are
@@ -444,7 +444,7 @@ disable it globally by setting `Builder.vvFile` to the empty string.
 ## Exported Definitions
 
 Minion defines a number of variables and functions for use by user Makefiles
-within recursive property definitions.
+within [recursive](#simple-and-recursive-variables) property definitions.
 
 * Character constants
 

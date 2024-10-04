@@ -9,24 +9,18 @@
 
 CC++.inherit ?= _CC++
 CC.inherit ?= _CC
-Compile.inherit ?= _Compile
+CExe++.inherit ?= _CExe++
+CExe.inherit ?= _CExe
+CCBase.inherit ?= _CCBase
 Copy.inherit ?= _Copy
 Exec.inherit ?= _Exec
 GZip.inherit ?= _GZip
 Link.inherit ?= _Link
-LinkC++.inherit ?= _LinkC++
-LinkC.inherit ?= _LinkC
-Mkdir.inherit ?= _Mkdir
 Phony.inherit ?= _Phony
 Print.inherit ?= _Print
-Remove.inherit ?= _Remove
 Run.inherit ?= _Run
-Tar.inherit ?= _Tar
 Test.inherit ?= _Test
-Touch.inherit ?= _Touch
-Unzip.inherit ?= _Unzip
 Write.inherit ?= _Write
-Zip.inherit ?= _Zip
 
 
 #--------------------------------
@@ -75,29 +69,35 @@ _IsPhony.mkdirs = # not a real file => no need to create directory
 _IsPhony.vvFile = # always runs => no point in validating
 
 
-# Compile(SOURCE) : Base class for invoking a compiler.
+# CCBase(SOURCE) : Base class for invoking a compiler.  This is expected to
+#    serve as a template or example for actual projects, which will
+#    typically override properties at the CCBase or CC/CC++ level.
 #
-_Compile.inherit = Builder
-_Compile.outExt = .o
-_Compile.command = {compiler} -c -o {@} {<} {flags} -MMD -MP -MF {depsFile}
-_Compile.depsFile = {@}.d
-_Compile.rule = {inherit}-include {depsFile}$(\n)
-_Compile.flags = {optFlags} {warnFlags} {libFlags} $(addprefix -I,{includes})
-_Compile.optFlags =
-_Compile.warnFlags =
-_Compile.libFlags =
-_Compile.includes =
+#    "-MF" is used to generate a make include file that lists all implied
+#    depenencies (those that do not appear on the command line -- included
+#    headers).
+#
+_CCBase.inherit = Builder
+_CCBase.outExt = .o
+_CCBase.command = {compiler} -c -o {@} {<} {options} -MMD -MP -MF {depsFile}
+_CCBase.depsFile = {@}.d
+_CCBase.rule = {inherit}-include {depsFile}$(\n)
+_CCBase.options = {srcFlags} {objFlags} {libFlags} $(addprefix -I,{includes})
+_CCBase.srcFlags = -std=c99 -Wall -Werror
+_CCBase.objFlags = -O2
+_CCBase.libFlags =
+_CCBase.includes =
 
 
 # CC(SOURCE) : Compile a C file to an object file.
 #
-_CC.inherit = Compile
+_CC.inherit = CCBase
 _CC.compiler = gcc
 
 
 # CC++(SOURCE) : Compile a C++ file to an object file.
 #
-_CC++.inherit = Compile
+_CC++.inherit = CCBase
 _CC++.compiler = g++
 
 
@@ -110,18 +110,18 @@ _Link.flags = {libFlags}
 _Link.libFlags =
 
 
-# LinkC(INPUTS) : Link a command-line C program.
+# CExe(INPUTS) : Link a command-line C program.
 #
-_LinkC.inherit = _Link
-_LinkC.compiler = gcc
-_LinkC.inferClasses = CC.c
+_CExe.inherit = _Link
+_CExe.compiler = gcc
+_CExe.inferClasses = CC.c
 
 
-# LinkC++(INPUTS) : Link a command-line C++ program.
+# CExe++(INPUTS) : Link a command-line C++ program.
 #
-_LinkC++.inherit = _Link
-_LinkC++.compiler = g++
-_LinkC++.inferClasses = CC.c CC++.cpp CC++.cc
+_CExe++.inherit = _Link
+_CExe++.compiler = g++
+_CExe++.inferClasses = CC.c CC++.cpp CC++.cc
 
 
 # Exec(COMMAND) : Run a command, capturing what it writes to stdout.
@@ -139,7 +139,7 @@ _Exec.command = ( {exportPrefix} {exec} ) > {@} || ( rm -f {@}; false )
 _Exec.exec = {<} {execArgs} $(wordlist 2,9999,{^})
 _Exec.execArgs =
 _Exec.outExt = .out
-_Exec.inferClasses = LinkC.c LinkC++.cpp LinkC++.cc
+_Exec.inferClasses = CExe.c CExe++.cpp CExe++.cc
 
 
 # Test(COMMAND) : Run a command (as per Exec) updating an OK file on success.
@@ -170,42 +170,10 @@ _Copy.outDir = $(or $(call _namedArg1,dir),$(VOUTDIR)$(_class)/)
 _Copy.command = cp {<} {@}
 
 
-# Mkdir(DIR) : Create directory
-#
-_Mkdir.inherit = Builder
-_Mkdir.in =
-_Mkdir.out = $(_arg1)
-_Mkdir.mkdirs =
-_Mkdir.vvFile = # without {mkdirs}, this will fail
-_Mkdir.command = mkdir -p {@}
-
-
-# Touch(FILE) : Create empty file
-#
-_Touch.inherit = Builder
-_Touch.in =
-_Touch.out = $(_arg1)
-_Touch.command = touch {@}
-
-
-# Remove(FILE) : Remove FILE from the file system
-#
-_Remove.inherit = Phony
-_Remove.in =
-_Remove.command = rm -f $(_arg1)
-
-
 # Print(INPUT) : Write artifact to stdout.
 #
 _Print.inherit = Phony
 _Print.command = @cat {<}
-
-
-# Tar(INPUTS) : Construct a TAR file
-#
-_Tar.inherit = Builder
-_Tar.outExt = .tar
-_Tar.command = tar -cvf {@} {^}
 
 
 # GZip(INPUT) :  Compress an artifact.
@@ -213,24 +181,6 @@ _Tar.command = tar -cvf {@} {^}
 _GZip.inherit = Exec
 _GZip.exec = gzip -c {^}
 _GZip.outExt = %.gz
-
-
-# Zip(INPUTS) : Construct a ZIP file
-#
-_Zip.inherit = Builder
-_Zip.outExt = .zip
-_Zip.command = zip {@} {^}
-
-
-# Unzip(OUT) : Extract from a zip file
-#
-#   The argument is the name of the file to extract from the ZIP file.  The
-#   ZIP file name is based on the class name.  Declare a subclass with the
-#   appropriate name, or override its `in` property to specify the zip file.
-#
-_Unzip.inherit = Builder
-_Unzip.command = unzip -p {<} $(_argText) > {@} || rm {@}
-_Unzip.in = $(_class).zip
 
 
 # Write(VAR)
@@ -243,6 +193,7 @@ _Write.out = $(or $(call _namedArg1,out),{inherit})
 _Write.command = @$(call _printf,{data}) > {@}
 _Write.data = $($(_arg1))
 _Write.in =
+
 
 # Builder(ARGS):  Base class for builders.
 
@@ -293,7 +244,7 @@ Builder.deps^ = $(call get,out,{depsIDs})
 # `inferClasses` a list of words in the format "CLASS.EXT", implying
 # that each input filename ending in ".EXT" should be replaced with
 # "CLASS(FILE.EXT)".  This is used to, for example, convert ".c" files
-# to ".o" when they are provided as inputs to a LinkC instance.
+# to ".o" when they are provided as inputs to a CExe instance.
 Builder.inferClasses =
 
 # Note: By default, `outDir`, `outName`, and `outExt` are used to

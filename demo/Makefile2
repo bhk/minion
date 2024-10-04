@@ -1,6 +1,6 @@
 sources = hello.c binsort.c
 
 Alias(default).in = Exec@sources
-Alias(deploy).in = Copy@LinkC@sources
+Alias(deploy).in = Copy@CExe@sources
 
 include ../minion.mk

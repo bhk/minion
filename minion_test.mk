@@ -232,10 +232,9 @@ $(call _expectEQ,$(call get,outDir,P(a.o)),.out/P/)
 $(call _expectEQ,$(call get,out,P(a.o)),.out/P/a.o.p)
 
 p1 = a.c
-$(call _expectEQ,$(call get,out,LinkC(@p1)),.out/LinkC_@/p1)
+$(call _expectEQ,$(call get,out,CExe(@p1)),.out/CExe_@/p1)
 
-$(call _expectEQ,$(call get,out,Tar(@p1)),.out/Tar_@/p1.tar)
-$(call _expectEQ,$(call get,out,Zip(@p1)),.out/Zip_@/p1.zip)
+$(call _expectEQ,$(call get,out,CC(@p1)),.out/CC_@/p1.o)
 
 # Inference
 
