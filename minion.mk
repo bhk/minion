@@ -12,7 +12,7 @@ CC.inherit ?= _CC
 Compile.inherit ?= _Compile
 Copy.inherit ?= _Copy
 Exec.inherit ?= _Exec
-Gzip.inherit ?= _Gzip
+GZip.inherit ?= _GZip
 Link.inherit ?= _Link
 LinkC++.inherit ?= _LinkC++
 LinkC.inherit ?= _LinkC
@@ -21,8 +21,8 @@ Phony.inherit ?= _Phony
 Print.inherit ?= _Print
 Remove.inherit ?= _Remove
 Run.inherit ?= _Run
-Shell.inherit ?= _Shell
 Tar.inherit ?= _Tar
+Test.inherit ?= _Test
 Touch.inherit ?= _Touch
 Unzip.inherit ?= _Unzip
 Write.inherit ?= _Write
@@ -48,29 +48,34 @@ Variants.inherit = Phony
 Variants.in = $(foreach v,{all},_Variant($(_argText),V:$v))
 
 
-# _Variant(TARGETNAME,V:VARIANT) : Build VARIANT of TARGETNAME.
+# Variant(TARGETNAME,V:VARIANT) : Build VARIANT of TARGETNAME.
 #
 _Variant.inherit = Phony
 _Variant.in =
 _Variant.command = @$(MAKE) -f $(word 1,$(MAKEFILE_LIST)) --no-print-directory $(call _shellQuote,$(subst =,:,$(_arg1))) V=$(call _shellQuote,$(call _namedArg1,V))
 
 
-# _Phony(INPUTS) : Generate a phony rule.
+# Phony(INPUTS) : Generate a phony rule.
 #
 #   A phony rule does not generate an output file.  Therefore, Make cannot
 #   determine whether its result is "new" or "old", so it is always
 #   considered "old", and its recipe will be executed whenever it is listed
 #   as a target.
 #
-_Phony.inherit = Builder
-_Phony.rule = .PHONY: {@}$(\n){inherit}
-_Phony.mkdirs = # not a real file => no need to create directory
-_Phony.message =
+_Phony.inherit = _IsPhony Builder
 _Phony.command = @true
-_Phony.vvFile = # always runs => no point in validating
+_Phony.message =
 
 
-# _Compile(SOURCE) : Base class for invoking a compiler.
+# _IsPhony : Mixin that defines properties as appropriate for all phony
+#    targets; can be used to make any class phony.
+#
+_IsPhony.rule = .PHONY: {@}$(\n){inherit}
+_IsPhony.mkdirs = # not a real file => no need to create directory
+_IsPhony.vvFile = # always runs => no point in validating
+
+
+# Compile(SOURCE) : Base class for invoking a compiler.
 #
 _Compile.inherit = Builder
 _Compile.outExt = .o
@@ -84,19 +89,19 @@ _Compile.libFlags =
 _Compile.includes =
 
 
-# _CC(SOURCE) : Compile a C file to an object file.
+# CC(SOURCE) : Compile a C file to an object file.
 #
 _CC.inherit = Compile
 _CC.compiler = gcc
 
 
-# _CC++(SOURCE) : Compile a C++ file to an object file.
+# CC++(SOURCE) : Compile a C++ file to an object file.
 #
 _CC++.inherit = Compile
 _CC++.compiler = g++
 
 
-# _Link(INPUTS) : Link an executable.
+# Link(INPUTS) : Link an executable.
 #
 _Link.inherit = Builder
 _Link.outExt =
@@ -105,56 +110,67 @@ _Link.flags = {libFlags}
 _Link.libFlags =
 
 
-# _LinkC(INPUTS) : Link a command-line C program.
+# LinkC(INPUTS) : Link a command-line C program.
 #
 _LinkC.inherit = _Link
 _LinkC.compiler = gcc
 _LinkC.inferClasses = CC.c
 
 
-# _LinkC++(INPUTS) : Link a command-line C++ program.
+# LinkC++(INPUTS) : Link a command-line C++ program.
 #
 _LinkC++.inherit = _Link
 _LinkC++.compiler = g++
 _LinkC++.inferClasses = CC.c CC++.cpp CC++.cc
 
 
-# _Shell(PROGRAM) : This class defines properties shared by Exec and Run.
-# It does not define Builder properties.
+# Exec(COMMAND) : Run a command, capturing what it writes to stdout.
 #
-_Shell.exec = {exportPrefix}./{<} {args}
-_Shell.inferClasses = LinkC.c LinkC.o LinkC++.cpp
-_Shell.args =
-_Shell.exports =
-_Shell.exportPrefix = $(foreach v,{exports},$v=$(call _shellQuote,{$v}) )
-
-
-# _Exec(PROGRAM) : Run PROGRAM, capturing its output (stdout).
+#    By default, the first ingredient is an executable or shell command, and
+#    it is passed as arguments the {execArgs} property and all other
+#    ingredients.  Override {exec} to change what is to be executed while
+#    retaining other behavior.
 #
-_Exec.inherit = Shell Builder
-_Exec.command = ( {exec} ) > {@} || rm {@}
+#    Note: If you override {exec} such that {<} is not the executable, then
+#    you should also probably override {inferClasses}.
+#
+_Exec.inherit = Builder
+_Exec.command = ( {exportPrefix} {exec} ) > {@} || ( rm -f {@}; false )
+_Exec.exec = {<} {execArgs} $(wordlist 2,9999,{^})
+_Exec.execArgs =
 _Exec.outExt = .out
+_Exec.inferClasses = LinkC.c LinkC++.cpp LinkC++.cc
 
 
-# _Run(PROGRAM) : run program (as a Phony rule)
+# Test(COMMAND) : Run a command (as per Exec) updating an OK file on success.
 #
-_Run.inherit = Shell Phony
-_Run.command = {exec}
+_Test.inherit = Exec
+_Test.command = {exportPrefix} {exec}$(\n)touch {@}
+_Test.outExt = .ok
 
 
-# _Copy(INPUT)
-# _Copy(INPUT,out:OUT)
+# Run(COMMAND) : run command (as per Exec).
 #
-#   Copy an artifact.  If OUT is not provided, the file is copied to a
-#   directory named $(VOUTDIR)$(_class).
+_Run.inherit = _IsPhony Exec
+_Run.command = {exportPrefix} {exec}
+
+
+# Copy(INPUT)
+# Copy(INPUT,out:OUT)
+# Copy(INPUT,dir:DIR)
+#
+#   Copy a single artifact.
+#   OUT, when provided, specifies the destination file.
+#   DIR, when provided, gives the destination directory.
+#   Otherwise, $(VOUTDIR)$(_class) is the destination directory.
 #
 _Copy.inherit = Builder
 _Copy.out = $(or $(call _namedArg1,out),{inherit})
-_Copy.outDir = $(VOUTDIR)$(_class)/
+_Copy.outDir = $(or $(call _namedArg1,dir),$(VOUTDIR)$(_class)/)
 _Copy.command = cp {<} {@}
 
 
-# _Mkdir(DIR) : Create directory
+# Mkdir(DIR) : Create directory
 #
 _Mkdir.inherit = Builder
 _Mkdir.in =
@@ -164,7 +180,7 @@ _Mkdir.vvFile = # without {mkdirs}, this will fail
 _Mkdir.command = mkdir -p {@}
 
 
-# _Touch(FILE) : Create empty file
+# Touch(FILE) : Create empty file
 #
 _Touch.inherit = Builder
 _Touch.in =
@@ -172,41 +188,41 @@ _Touch.out = $(_arg1)
 _Touch.command = touch {@}
 
 
-# _Remove(FILE) : Remove FILE from the file system
+# Remove(FILE) : Remove FILE from the file system
 #
 _Remove.inherit = Phony
 _Remove.in =
 _Remove.command = rm -f $(_arg1)
 
 
-# _Print(INPUT) : Write artifact to stdout.
+# Print(INPUT) : Write artifact to stdout.
 #
 _Print.inherit = Phony
 _Print.command = @cat {<}
 
 
-# _Tar(INPUTS) : Construct a TAR file
+# Tar(INPUTS) : Construct a TAR file
 #
 _Tar.inherit = Builder
 _Tar.outExt = .tar
 _Tar.command = tar -cvf {@} {^}
 
 
-# _Gzip(INPUT) :  Compress an artifact.
+# GZip(INPUT) :  Compress an artifact.
 #
-_Gzip.inherit = Builder
-_Gzip.command = cat {<} | gzip - > {@} || rm {@}
-_Gzip.outExt = %.gz
+_GZip.inherit = Exec
+_GZip.exec = gzip -c {^}
+_GZip.outExt = %.gz
 
 
-# _Zip(INPUTS) : Construct a ZIP file
+# Zip(INPUTS) : Construct a ZIP file
 #
 _Zip.inherit = Builder
 _Zip.outExt = .zip
 _Zip.command = zip {@} {^}
 
 
-# _Unzip(OUT) : Extract from a zip file
+# Unzip(OUT) : Extract from a zip file
 #
 #   The argument is the name of the file to extract from the ZIP file.  The
 #   ZIP file name is based on the class name.  Declare a subclass with the
@@ -217,8 +233,8 @@ _Unzip.command = unzip -p {<} $(_argText) > {@} || rm {@}
 _Unzip.in = $(_class).zip
 
 
-# _Write(VAR)
-# _Write(VAR,out:OUT)
+# Write(VAR)
+# Write(VAR,out:OUT)
 #
 #   Write the value of a variable to a file.
 #
@@ -239,8 +255,6 @@ Builder.^ = {inFiles}
 # required to build auto-generated implicit dependencies (which should be
 # included in `ooIDs`).
 Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
-
-Builder.up^ = $(call get,out,{upIDs})
 
 # `in` is the user-supplied set of "inputs", in the form of a target list
 # (targets or indirections).  It is intended to be easily overridden
@@ -264,6 +278,7 @@ Builder.inFiles = $(call _pairFiles,{inPairs})
 # not by the instance argument or `in` property.
 Builder.up =
 Builder.upIDs = $(call _expand,{up},up)
+Builder.up^ = $(call get,out,{upIDs})
 
 # `oo` lists order-only dependencies.
 Builder.oo =
@@ -298,6 +313,11 @@ _applyExt = $(basename $1)$(subst %,$(suffix $1),$2)
 Builder.message ?= \#-> $(_self)
 
 Builder.mkdirs = $(sort $(dir {@} {vvFile}))
+
+# This may be prepended to individual command lines to export environment variables
+# listed in {exports}
+Builder.exportPrefix = $(foreach v,{exports},$v=$(call _shellQuote,{$v}) )
+Builder.exports =
 
 # Validity value
 #
@@ -487,9 +507,8 @@ $(word 1,$(MAKEFILE_LIST)) usage:
    make help 'C(A).P'       Compute value of property P for C(A)
    make clean               `$(call get,command,Alias(clean))`
 
-Goals can be ordinary Make targets defined by your Makefile,
-instances (`Class(Arg)`), variable indirections (`@var`), or
-aliases defined by your Makefile.  Note that instances must
+Goals can be ordinary Make targets, Minion instances (`Class(Arg)`),
+variable indirections (`@var`), or aliases. Note that instances must
 be quoted for the shell.
 
 endef

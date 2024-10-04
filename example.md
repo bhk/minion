@@ -51,7 +51,8 @@ gcc -o .out/LinkC.o_CC.c/hello .out/CC.c/hello.o
 ```
 ```console
 $ make 'Run(LinkC(CC(hello.c)))'
-./.out/LinkC.o_CC.c/hello 
+#-> Run(LinkC(CC(hello.c)))
+.out/LinkC.o_CC.c/hello  
 Hello world.
 
 ```
@@ -100,7 +101,8 @@ rm -rf .out/
 gcc -c -o .out/CC.c/hello.o hello.c     -MMD -MP -MF .out/CC.c/hello.o.d
 #-> LinkC(hello.c)
 gcc -o .out/LinkC.c/hello .out/CC.c/hello.o  
-./.out/LinkC.c/hello 
+#-> Run(hello.c)
+.out/LinkC.c/hello  
 Hello world.
 
 ```
@@ -117,7 +119,8 @@ a goal, and so on.
 
 ```console
 $ make 'Run(hello.c)'
-./.out/LinkC.c/hello 
+#-> Run(hello.c)
+.out/LinkC.c/hello  
 Hello world.
 
 ```
@@ -128,7 +131,7 @@ file, so its targets are *not* phony.
 ```console
 $ make 'Exec(hello.c)'
 #-> Exec(hello.c)
-( ./.out/LinkC.c/hello  ) > .out/Exec.c/hello.out || rm .out/Exec.c/hello.out
+(  .out/LinkC.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
 
 ```
 
@@ -164,9 +167,9 @@ to underlying Make primitives.
 $ make help 'Run(hello.c)'
 "Run(hello.c)" is an instance.
 
-Output: .out/Run/hello.c
+Output: .out/Run.c/hello.out
 
-Command: './.out/LinkC.c/hello '
+Command: ' .out/LinkC.c/hello  '
 
 Direct dependencies: 
    LinkC(hello.c)
@@ -181,7 +184,7 @@ $ make help 'Exec(hello.c)'
 
 Output: .out/Exec.c/hello.out
 
-Command: '( ./.out/LinkC.c/hello  ) > .out/Exec.c/hello.out || rm .out/Exec.c/hello.out'
+Command: '(  .out/LinkC.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )'
 
 Direct dependencies: 
    LinkC(hello.c)
@@ -226,13 +229,15 @@ It expands to the following targets:
 ```
 ```console
 $ make Run@sources sources='hello.c binsort.c'
-./.out/LinkC.c/hello 
+#-> Run(hello.c)
+.out/LinkC.c/hello  
 Hello world.
 #-> CC(binsort.c)
 gcc -c -o .out/CC.c/binsort.o binsort.c     -MMD -MP -MF .out/CC.c/binsort.o.d
 #-> LinkC(binsort.c)
 gcc -o .out/LinkC.c/binsort .out/CC.c/binsort.o  
-./.out/LinkC.c/binsort 
+#-> Run(binsort.c)
+.out/LinkC.c/binsort  
 srch(7) = 5
 srch(6) = 9
 srch(12) = 9
@@ -299,7 +304,7 @@ alias or target named `default`, so these commands do the same thing:
 ```console
 $ make
 #-> Exec(binsort.c)
-( ./.out/LinkC.c/binsort  ) > .out/Exec.c/binsort.out || rm .out/Exec.c/binsort.out
+(  .out/LinkC.c/binsort   ) > .out/Exec.c/binsort.out || ( rm -f .out/Exec.c/binsort.out; false )
 
 ```
 ```console
@@ -329,7 +334,7 @@ gcc -c -o .out/CC.c/hello.o hello.c -Os -MMD -MP -MF .out/CC.c/hello.o.d
 #-> LinkC(hello.c)
 gcc -o .out/LinkC.c/hello .out/CC.c/hello.o  
 #-> Exec(hello.c)
-( ./.out/LinkC.c/hello  ) > .out/Exec.c/hello.out || rm .out/Exec.c/hello.out
+(  .out/LinkC.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
 
 ```
 
@@ -349,7 +354,7 @@ gcc -c -o .out/CC.c/binsort.o binsort.c -Os -MMD -MP -MF .out/CC.c/binsort.o.d
 #-> LinkC(binsort.c)
 gcc -o .out/LinkC.c/binsort .out/CC.c/binsort.o  
 #-> Exec(binsort.c)
-( ./.out/LinkC.c/binsort  ) > .out/Exec.c/binsort.out || rm .out/Exec.c/binsort.out
+(  .out/LinkC.c/binsort   ) > .out/Exec.c/binsort.out || ( rm -f .out/Exec.c/binsort.out; false )
 
 ```
 
