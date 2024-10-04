@@ -397,6 +397,9 @@ OUTDIR ?= .out/
 # Build products for the current V are placed here
 VOUTDIR ?= $(OUTDIR)$(if $V,$V/)
 
+# Is $1 a "safe" arg to "rm -rf"?  (Catch accidental ".", "..", "/" etc.)
+_safeToClean = $(filter-out . ..,$(subst /, ,$1))
+
 # $(call minion_alias,GOAL) returns an instance if GOAL is an alias,
 #   or an empty value otherwise.  User makefiles can override this to
 #   support other types of aliases.
@@ -542,9 +545,7 @@ _help! = \
 
 _forceTarget = $(OUTDIR)FORCE
 
-_OUTDIR_safe? = $(filter-out . ..,$(subst /, ,$(OUTDIR)))
-
-Alias(clean).command ?= $(if $(_OUTDIR_safe?),rm -rf $(OUTDIR),@echo '** make clean is disabled; OUTDIR is unsafe: "$(OUTDIR)"' ; false)
+Alias(clean).command ?= $(if $(call _safeToClean,$(VOUTDIR)),rm -rf $(VOUTDIR),@echo '** make clean is disabled; VOUTDIR is unsafe: "$(VOUTDIR)"' ; false)
 
 # This will be the default target when `$(minion_end)` is omitted (and
 # no goal is named on the command line)
