@@ -322,8 +322,7 @@
           (recur)
           (.. (_describeVar C1.P "   ")
               (if has-inherit
-                  (.. "\n\n...wherein {inherit} references:\n\n" (recur)))))
-      "Error: no definition found!"))
+                  (.. "\n\n...wherein {inherit} references:\n\n" (recur)))))))
 
 (export (native-name _describeProp) nil)
 
@@ -468,5 +467,4 @@
             "\n"
             "   A.i :=  (A.i) "))
 
-(expect (_describeProp "UNDEF(a)" "foo")
-        (.. "Error: no definition found!"))
+(expect (_describeProp "UNDEF(a)" "foo") "")

@@ -195,74 +195,58 @@ _Write.data = $($(_arg1))
 _Write.in =
 
 
-# Builder(ARGS):  Base class for builders.
+# Builder(ARGS):  Base class for builders.  See minion.md for details.
 
-# Shorthand properties
+# Core builder properties
+Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
+Builder.out = {outDir}{outName}
+define Builder.rule
+{@} : {^} {up^} {deps^} | $(call get,out,{ooIDs})
+$(call _recipeEnc,$(call _recipe,
+$(if {message},@echo $(call _shellQuote,{message}))
+$(if {mkdirs},@mkdir -p {mkdirs})
+$(if {vvFile},@echo '_vv={vvValue}' > {vvFile})
+{command}))
+$(if {vvFile},{vvRule})
+endef
+
+# Shorthands
 Builder.@ = {out}
 Builder.< = $(firstword {^})
 Builder.^ = {inFiles}
 
-# `needs` should include all explicit dependencies and any instances
-# required to build auto-generated implicit dependencies (which should be
-# included in `ooIDs`).
-Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
-
-# `in` is the user-supplied set of "inputs", in the form of a target list
-# (targets or indirections).  It is intended to be easily overridden
-# on a per-class or per-instance basis.
-#
-# The actual set of prerequisites differs from `in` in a few ways:
-#  - Indirections are expanded
-#  - Inference (as per `inferClasses`) may replace targets with
-#    intermediate results.
-#  - `up` targets are also dependencies (but not "inputs")
-#
 Builder.in = $(_args)
-
 # list of ([ID,]FILE) pairs for inputs
 Builder.inPairs = $(call _inferPairs,$(foreach i,$(call _expand,{in},in),$i$(if $(filter %$],$i),$$$(call get,out,$i))),{inferClasses})
-
 Builder.inIDs = $(call _pairIDs,{inPairs})
 Builder.inFiles = $(call _pairFiles,{inPairs})
 
-# `up` lists dependencies that are typically specified by the class itself,
-# not by the instance argument or `in` property.
+# up: dependencies specified by the class
 Builder.up =
 Builder.upIDs = $(call _expand,{up},up)
 Builder.up^ = $(call get,out,{upIDs})
 
-# `oo` lists order-only dependencies.
+# oo: order-only dependencies.
 Builder.oo =
 Builder.ooIDs = $(call _expand,{oo},oo)
 
-# `deps` lists implicit dependencies: artifacts that are not listed on the
-# command line, but that (may) affect the output file anyway.
+# deps: direct dependencies not covered by {in} or {up}
 Builder.deps =
 Builder.depsIDs = $(call _expand,{deps})
 Builder.deps^ = $(call get,out,{depsIDs})
 
-# `inferClasses` a list of words in the format "CLASS.EXT", implying
-# that each input filename ending in ".EXT" should be replaced with
-# "CLASS(FILE.EXT)".  This is used to, for example, convert ".c" files
-# to ".o" when they are provided as inputs to a CExe instance.
+# inferClasses: a list of CLASS.EXT patterns
 Builder.inferClasses =
 
-# Note: By default, `outDir`, `outName`, and `outExt` are used to
-# construct `out`, but any of them can be overridden.  Do not assume
-# that, for example, `outDir` is always the same as `$(dir {out})`.
-Builder.out = {outDir}{outName}
-Builder.outDir = $(dir {outBasis})
-Builder.outName = $(call _applyExt,$(notdir {outBasis}),{outExt})
 Builder.outExt = %
+Builder.outDir = $(dir {outBasis})
+Builder.outName = $(foreach e,$(notdir {outBasis}),$(basename $e)$(subst %,$(suffix $e),{outExt}))
 Builder.outBasis = $(VOUTDIR)$(call _outBasis,$(_class),$(_argText),{outExt},$(call get,out,$(filter $(_arg1),$(word 1,$(call _expand,{in},in)))),$(_arg1))
 
-_applyExt = $(basename $1)$(subst %,$(suffix $1),$2)
-
-# Message to be displayed when/if the command executes.  By default, Minion
-# clases display this for non-phony rules.  The user can assign this
-# variable an empty value to prevent these messages.
+# message to be displayed when the command executes (if non-empty)
 Builder.message ?= \#-> $(_self)
 
+# directories to be created prior to commands in recipe
 Builder.mkdirs = $(sort $(dir {@} {vvFile}))
 
 # This may be prepended to individual command lines to export environment variables
@@ -270,13 +254,7 @@ Builder.mkdirs = $(sort $(dir {@} {vvFile}))
 Builder.exportPrefix = $(foreach v,{exports},$v=$(call _shellQuote,{$v}) )
 Builder.exports =
 
-# Validity value
-#
-# If {vvFile} is non-empty, the rule will compare {vvValue} will to the
-# value it had when the target file was last updated.  If they do not match,
-# the target file will be treated as stale.  The user can set this to an
-# empty value in order to disable validity checking.
-#
+# Validity values
 Builder.vvFile ?= {outBasis}.vv
 Builder.vvValue = $(call _vvEnc,{command},{@})
 
@@ -289,11 +267,10 @@ endif
 
 endef
 
-# $(call _vvEnc,DATA,OUTFILE) : Encode to be shell-safe (within single
-#   quotes) and Make-safe (within double-quotes or RHS of assignment)
-#   and echo-safe (across /bin/echo and various shell builtins)
+# $(call _vvEnc,DATA,OUTFILE) : Encode DATA to be shell-safe (within single
+#   quotes) and Make-safe (within double-quotes or RHS of assignment) and
+#   echo-safe (across /bin/echo and various shell builtins)
 _vvEnc = .$(subst ',`,$(subst ",!`,$(subst `,!b,$(subst $$,!S,$(subst $(\n),!n,$(subst $(\t),!+,$(subst \#,!H,$(subst $2,!@,$(subst \,!B,$(subst !,!1,$1)))))))))).#'
-
 
 # $(call _lazy,MAKESRC) : Encode MAKESRC for inclusion in a recipe so that
 # it will be expanded when and if the recipe is executed.  Otherwise, all
@@ -307,20 +284,6 @@ _recipeEnc = $(subst $(\e),$$,$(subst $$,$$$$,$1))
 
 # Remove empty lines, prefix remaining lines with \t
 _recipe = $(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))
-
-# A Minion instance's "rule" is all the Make source code required to build
-# it.  It contains a Make rule (target, prereqs, recipe) and perhaps other
-# statements.
-#
-define Builder.rule
-{@} : {^} {up^} {deps^} | $(call get,out,{ooIDs})
-$(call _recipeEnc,$(call _recipe,
-$(if {message},@echo $(call _shellQuote,{message}))
-$(if {mkdirs},@mkdir -p {mkdirs})
-$(if {vvFile},@echo '_vv={vvValue}' > {vvFile})
-{command}))
-$(if {vvFile},{vvRule})
-endef
 
 
 #--------------------------------
@@ -428,7 +391,8 @@ _printfEsc = $(subst $(\n),\n,$(subst $(\t),\t,$(subst \,\\,$1)))
 _printf = printf "%b" $(call _shellQuote,$(_printfEsc))
 
 # Quote a (possibly multi-line) $1
-_qv = $(if $(findstring $(\n),$1),$(subst $(\n),$(\n)  | ,$(\n)$1),'$1')
+_qvn = $(if $(findstring $(\n),$1),$(subst $(\n),$(\n)  | ,$(\n)$1),$2$1$2)
+_qv = $(call _qvn,$1,')#'
 
 # $(call _?,FN,ARGS..): same as $(call FN,ARGS..), but logs args & result.
 _? = $(call __?,$$(call $1,$2,$3,$4,$5),$(call $1,$2,$3,$4,$5))
@@ -436,7 +400,7 @@ __? = $(info $1 -> $2)$2
 
 # $(call _log,NAME,VALUE): Output "NAME: VALUE" when NAME matches the
 #   pattern in `$(minion_debug)`.
-_log = $(if $(filter $(minion_debug),$1),$(info $1: $(call _qv,$2)))
+_log = $(if $(filter $(minion_debug),$1),$(info $1: $(call _qvn,$2)))
 
 # $(call _eval,NAME,VALUE): Log + eval VALUE
 _eval = $(_log)$(eval $2)
@@ -485,18 +449,18 @@ endef
 
 
 define _helpInstance
-"$1" is an instance.
+$1 is an instance.
 
-Output: $(call get,out,$1)
+{out} = $(call get,out,$1)
 
-Command: $(call _qv,$(call _recipeEnc,$(call get,command,$1)))
+{command} = $(call _qvn,$(call _recipeEnc,$(call get,command,$1)))
 
 $(_helpDeps)
 endef
 
 
 define _helpIndirect
-"$1" is an indirection on the following variable:
+$1 is an indirection on the following variable:
 
 $(call _describeVar,$(_ivar),   )
 
@@ -505,26 +469,30 @@ endef
 
 
 define _helpAlias
-"$1" is an alias for $(minion_alias).
+$1 is an alias for $(minion_alias).
 $(if $(filter Alias$[%,$(minion_alias)),
 It is defined by:$(foreach v,$(filter Alias($1).%,$(.VARIABLES)),
 $(call _describeVar,$v,   )
 ))
 $(call _helpDeps,$(minion_alias))
 
-It generates the following rule: $(call _qv,$(call get,rule,$(minion_alias)))
+It generates the following rule: $(call _qvn,$(call get,rule,$(minion_alias)))
 endef
 
 
-define _helpProperty
-$(foreach p,$(or $(lastword $(subst $].,$] ,$1)),$(error Empty property name in $1)),$(foreach id,$(patsubst %$].$p,%$],$1),$(info $(id) inherits from: $(call _chain,$(call _idC,$(id)))
+# $1 = C(A).P; $2 = description;  $(id) = C(A); $p = P
+define _helpPropertyInfo
+$(id) inherits from: $(call _chain,$(call _idC,$(id)))
 
-$1 is defined by:
+{$p} $(if $(if $2,,1),is not defined!,is defined by:
 
-$(call _describeProp,$(id),$p))
-Its value is: $(call _qv,$(call get,$p,$(id)))
-))
+$2
+
+Its value is: $(call _qv,$(call get,$p,$(id))))
+
 endef
+
+_helpProperty = $(foreach p,$(or $(lastword $(subst $].,$] ,$1)),$(error Empty property name in $1)),$(foreach id,$(patsubst %$].$p,%$],$1),$(call _helpPropertyInfo,$1,$(call _describeProp,$(id),$p))))
 
 
 define _helpOther
@@ -631,7 +599,7 @@ _args = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))))
 _arg1 = $(word 1,$(_args))
 _namedArgs = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))),$1)
 _namedArg1 = $(word 1,$(_namedArgs))
-_describeProp = $(if $1,$(if $(filter u%,$(flavor $(word 1,$1).$2)),$(call _describeProp,$(or $(_idC),$(_pup)),$2),$(call _describeVar,$(word 1,$1).$2,   )$(if $(and $(filter r%,$(flavor $(word 1,$1).$2)),$(findstring {inherit},$(value $(word 1,$1).$2))),$(\n)$(\n)...wherein {inherit} references:$(\n)$(\n)$(call _describeProp,$(or $(_idC),$(_pup)),$2))),Error: no definition found!)
+_describeProp = $(if $1,$(if $(filter u%,$(flavor $(word 1,$1).$2)),$(call _describeProp,$(or $(_idC),$(_pup)),$2),$(call _describeVar,$(word 1,$1).$2,   )$(if $(and $(filter r%,$(flavor $(word 1,$1).$2)),$(findstring {inherit},$(value $(word 1,$1).$2))),$(\n)$(\n)...wherein {inherit} references:$(\n)$(\n)$(call _describeProp,$(or $(_idC),$(_pup)),$2))))
 _chain = $(if $1,$(call _chain,$(_pup),$2 $(word 1,$1)),$(filter %,$2))
 
 # tools.scm

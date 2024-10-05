@@ -165,11 +165,11 @@ to underlying Make primitives.
 
 ```console
 $ make help 'Run(hello.c)'
-"Run(hello.c)" is an instance.
+Run(hello.c) is an instance.
 
-Output: .out/Run.c/hello.out
+{out} = .out/Run.c/hello.out
 
-Command: ' .out/CExe.c/hello  '
+{command} =  .out/CExe.c/hello  
 
 Direct dependencies: 
    CExe(hello.c)
@@ -180,11 +180,11 @@ Indirect dependencies:
 ```
 ```console
 $ make help 'Exec(hello.c)'
-"Exec(hello.c)" is an instance.
+Exec(hello.c) is an instance.
 
-Output: .out/Exec.c/hello.out
+{out} = .out/Exec.c/hello.out
 
-Command: '(  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )'
+{command} = (  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
 
 Direct dependencies: 
    CExe(hello.c)
@@ -218,7 +218,7 @@ to each target identified in the variable.
 
 ```console
 $ make help Run@sources sources='hello.c binsort.c'
-"Run@sources" is an indirection on the following variable:
+Run@sources is an indirection on the following variable:
 
    sources = hello.c binsort.c
 
@@ -394,7 +394,7 @@ computed values.
 $ make -f MakefileP help 'C1(a).x'
 C1(a) inherits from: C1
 
-C1(a).x is defined by:
+{x} is defined by:
 
    C1(a).x = Xa
 
@@ -413,7 +413,7 @@ definition is chosen:
 $ make -f MakefileP help 'C1(b).x'
 C1(b) inherits from: C1
 
-C1(b).x is defined by:
+{x} is defined by:
 
    C1.x = X1
 
@@ -432,7 +432,7 @@ inheritance.)
 $ make -f MakefileP help 'C2(b).x'
 C2(b) inherits from: C2 C1
 
-C2(b).x is defined by:
+{x} is defined by:
 
    C1.x = X1
 
@@ -448,7 +448,7 @@ syntax:
 $ make -f MakefileP help 'C2(b).value'
 C2(b) inherits from: C2 C1
 
-C2(b).value is defined by:
+{value} is defined by:
 
    C1.value = {x} {y} {z}
 
@@ -466,7 +466,7 @@ evaluates it.
 $ make -f MakefileP help 'C3(b).z'
 C3(b) inherits from: C3 C2 C1
 
-C3(b).z is defined by:
+{z} is defined by:
 
    C3(b).z = {inherit}b
 
@@ -493,7 +493,7 @@ target file.
 $ make help 'CC(hello.c).command'
 CC(hello.c) inherits from: CC _CC CCBase _CCBase Builder
 
-CC(hello.c).command is defined by:
+{command} is defined by:
 
    _CCBase.command = {compiler} -c -o {@} {<} {options} -MMD -MP -MF {depsFile}
 
@@ -580,7 +580,7 @@ inherits.
 $ make help 'CCg(hello.c).objFlags'
 CCg(hello.c) inherits from: CCg CC _CC CCBase _CCBase Builder
 
-CCg(hello.c).objFlags is defined by:
+{objFlags} is defined by:
 
    CCg.objFlags = -g
 
@@ -668,7 +668,7 @@ include ../minion.mk
 $ make V=debug help 'CC(hello.c).objFlags'
 CC(hello.c) inherits from: CC CC-debug _CC CCBase _CCBase Builder
 
-CC(hello.c).objFlags is defined by:
+{objFlags} is defined by:
 
    CC-debug.objFlags = -g
 

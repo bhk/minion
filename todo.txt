@@ -1,10 +1,9 @@
 
 Minion TODOs:
- - Exec/Run/Test & inferClasses...  makes no sense for any but first input
- - Graph & Alias(graph) ?
- - document `make clean` & Alias(clean)
- - test rule caching
+ - `help C(A)`  ->  show {rule} if {command} is not defined
+ - lazy.mk?
  - Makefile.lazyCommand does not need to call _recipe
+ - test rule caching & clean
  - Makefile -> RuleCache
 
      RuleCache.rule = {out}: $(MAKEFILE_LIST) ; $(call _lazy,$$(call get,lazyRecipe,$(call _escArg,$(_self))))
@@ -54,6 +53,8 @@ Minion TODOs:
      )
      endef
 
+ - Graph & Alias(graph) ?
+ - Exec/Run/Test & inferClasses...  makes no sense for any but first input
  - Copyright?
  - compute partial ordering when traversing needs (graph can leverage)?
  - consistent naming conventions:
