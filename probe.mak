@@ -68,3 +68,23 @@ par: 1.sleep 2.sleep 3.sleep 4.sleep 5.sleep
 submake ?= par
 
 submake: ; @$(MAKE) -f $(word 1,$(MAKEFILE_LIST)) $(submake)
+
+
+#
+# Expansion of recipes
+#
+#  * When recipes are expanded at build time, they can contain
+#    newlines without tabs, even when in a one-line rule context.
+#
+
+define lazyRecipe
+# comment
+echo foo
+@echo bar
+echo baz
+endef
+
+test-lazy:
+	$(lazyRecipe)
+
+test-lazy2: ; $(lazyRecipe)
