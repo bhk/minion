@@ -1,4 +1,4 @@
-# minion_test.mk
+# fn_test.mk : Test make functions implemented in minion.mk
 
 Alias(default).in = #nothing
 MINION ?= minion.mk

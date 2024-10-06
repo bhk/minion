@@ -1,9 +1,6 @@
 
 Minion TODOs:
- - `help C(A)`  ->  show {rule} if {command} is not defined
- - lazy.mk?
  - Makefile.lazyCommand does not need to call _recipe
- - test rule caching & clean
  - Makefile -> RuleCache
 
      RuleCache.rule = {out}: $(MAKEFILE_LIST) ; $(call _lazy,$$(call get,lazyRecipe,$(call _escArg,$(_self))))
@@ -53,6 +50,7 @@ Minion TODOs:
      )
      endef
 
+ - `help C(A)`  ->  show {rule} if {command} is not defined
  - Graph & Alias(graph) ?
  - Exec/Run/Test & inferClasses...  makes no sense for any but first input
  - Copyright?

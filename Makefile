@@ -21,10 +21,10 @@ time: ; time make -R -f time.mk
 scam: ; scam minion.scm
 
 promote:
-	@$(call promote_cmd,minion.mk)
-	@$(call promote_cmd,demo.md)
+	@$(call promote-cmd,minion.mk)
+	@$(call promote-cmd,demo.md)
 
-promote_cmd = @\
+promote-cmd = @\
    if ( diff -q $1 .out/$1 ) ; then \
      true ; \
    else \
@@ -38,8 +38,9 @@ $(MO): *.scm minion.mk Makefile
 	scam minion.scm $@.2
 	cat $@.1 $@.2 > $@
 
-$(TO): $(MO) minion_test.mk
-	make -f minion_test.mk MINION=$<
+$(TO): $(MO) fn-test.mk rule-test.mk
+	make -f fn-test.mk MINION=$<
+	( make -f rule-test.mk MINION=$< ) > $@.log || ( cat $@.log ; false )
 	mkdir -p $(@D)
 	touch $@
 
@@ -48,4 +49,3 @@ $(EO): minion.mk demo/*
 	rm -rf demo/.out
 	cd demo && MAKEFLAGS= scam run-session.scm demo-session.md -- -o ../$@
 	rm demo/Makefile
-
