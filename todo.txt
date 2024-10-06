@@ -1,5 +1,4 @@
 Minion TODOs:
- - Graph & Alias(graph) ?
  - Exec/Run/Test & inferClasses...  makes no sense for any but first input
  - Copyright?
  - compute partial ordering when traversing needs (graph can leverage)?

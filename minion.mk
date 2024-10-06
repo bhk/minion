@@ -195,6 +195,21 @@ _Write.data = $($(_arg1))
 _Write.in =
 
 
+# Graph(INSTANCES) : Draw a graph of dependencies of instances
+#
+# Set Graph_FILES=1          to include explicit files (but not implicit deps)
+# Set Graph_IGNORE=CLASSES   to omit certain classes
+#
+Graph.inherit = Phony
+Graph.in =
+Graph.inExp = $(call Graph_filter,$(call _expand,$(_args)))
+Graph.rule = {@}: ; @true $$(info $$(call _graph,Graph_get-,$$(call _graph-trav,Graph_get-children,$(call _escArg,{inExp}))))
+
+Graph_filter = $(filter-out $(patsubst %,%$[%,$(Graph_IGNORE)),$(filter $(if $(Graph_FILES),%,%$]),$1))
+Graph_get-children = $(call Graph_filter,$(call get,needs,$1))
+Graph_get-name = $(patsubst Package(%),%,$(patsubst Alias(%),%,$1))
+
+
 # Builder(ARGS):  Base class for builders.  See minion.md for details.
 
 # Core builder properties
@@ -419,6 +434,7 @@ $(word 1,$(MAKEFILE_LIST)) usage:
    make help                Show this message
    make help GOALS...       Describe the named goals
    make help 'C(A).P'       Compute value of property P for C(A)
+   make graph               Show graph of dependencies for "default"
    make clean               `$(call get,command,Alias(clean))`
 
 Goals can be ordinary Make targets, Minion instances (`Class(Arg)`),
@@ -510,6 +526,8 @@ _help! = \
 _forceTarget = $(OUTDIR)FORCE
 
 Alias(clean).command ?= $(if $(call _safeToClean,$(VOUTDIR)),rm -rf $(VOUTDIR),@echo '** make clean is disabled; VOUTDIR is unsafe: "$(VOUTDIR)"' ; false)
+
+Alias(graph).in ?= Graph(Alias(default))
 
 # This will be the default target when `$(minion_end)` is omitted (and
 # no goal is named on the command line)
@@ -610,6 +628,8 @@ _rollupEx = $(if $1,$(call _rollupEx,$(filter-out $3 $1,$(sort $(filter %$],$(ca
 _relpath = $(if $(filter /%,$2),$2,$(if $(filter ..,$(subst /, ,$1)),$(error _relpath: '..' in $1),$(or $(foreach w,$(filter %/%,$(word 1,$(subst /,/% ,$1))),$(call _relpath,$(patsubst $w,%,$1),$(if $(filter $w,$2),$(patsubst $w,%,$2),../$2))),$2)))
 _group = $(if $1,$(subst | ,|0,$(subst ||,,$(join $(subst |,|1,$1),$(subst $(patsubst %,|,$(wordlist 1,$2,$1)),$(patsubst %,|,$(wordlist 1,$2,$1))|,$(patsubst %,|,$1))) )))
 _ungroup = $(subst |1,|,$(subst |0, ,$1))
+_graph = $(if $2,$(call _graph,$1,$(wordlist 2,9999,$2),$(subst ``,` ,$(filter-out %9,$(subst `  ,``,$(patsubst `,` ,$(subst `$(word 1,$2)`,`,$3) `$(subst $(\s),,$(addsuffix `,$(call $1children,$(word 1,$2)))) 9)))),$4$(foreach w,$3,$(if $(filter `,$w), ,|)  )$(\n)$(foreach w,$3,$(if $(findstring `$(word 1,$2)`,$w),+->,$(if $(filter `,$w), ,|)  ))$(if $3, )$(call $1name,$(word 1,$2))$(\n)),$4)
+_graph-trav = $(if $(word 1,$2),$(call _graph-trav,$1,$(call $1,$(word 1,$2)) $(wordlist 2,9999,$2),$(filter-out $(word 1,$2),$3) $(word 1,$2)),$3)
 
 # outputs.scm
 

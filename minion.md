@@ -481,6 +481,13 @@ Additionally, instance properties can be explored with Make help.  For example:
 inherited, and the inheritance chain for `CC`.
 
 
+### `make graph`
+
+The `graph` targets draws a textual representation of the dependency tree
+for the default target.  Use `make Graph(INSTANCE)` to see the dependencies
+of some other given instance.
+
+
 ## Exported Definitions
 
 Minion defines a number of variables and functions for use by user Makefiles
