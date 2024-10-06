@@ -79,9 +79,8 @@ _IsPhony.vvFile = # always runs => no point in validating
 #
 _CCBase.inherit = Builder
 _CCBase.outExt = .o
-_CCBase.command = {compiler} -c -o {@} {<} {options} -MMD -MP -MF {depsFile}
-_CCBase.depsFile = {@}.d
-_CCBase.rule = {inherit}-include {depsFile}$(\n)
+_CCBase.command = {compiler} -c -o {@} {<} {options} -MMD -MP -MF {@}.d
+_CCBase.rule = {inherit}-include {@}.d$(\n)
 _CCBase.options = {srcFlags} {objFlags} {libFlags} $(addprefix -I,{includes})
 _CCBase.srcFlags = -std=c99 -Wall -Werror
 _CCBase.objFlags = -O2
@@ -200,14 +199,25 @@ _Write.in =
 # Core builder properties
 Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
 Builder.out = {outDir}{outName}
+
 define Builder.rule
-{@} : {^} {up^} {deps^} | $(call get,out,{ooIDs})
-$(call _recipeEnc,$(call _recipeIndent,
+{@} : {^} $(call get,out,{upIDs} {depsIDs}) | $(call get,out,{ooIDs})
+$(call _recipe,{recipe})
+$(foreach F,{vvFile},\
+_vv =
+-include $F
+ifneq "$$(_vv)" "{vvValue}"
+  {@}: $(_forceTarget)
+endif
+)
+
+endef
+
+define Builder.recipe
 $(if {message},@echo $(call _shellQuote,{message}))
 $(if {mkdirs},@mkdir -p {mkdirs})
-$(if {vvFile},@echo '_vv={vvValue}' > {vvFile})
-{command}))
-$(if {vvFile},{vvRule})
+$(foreach F,{vvFile},@echo '_vv={vvValue}' > $F)
+{command}
 endef
 
 # Shorthands
@@ -258,14 +268,6 @@ Builder.exports =
 Builder.vvFile ?= {outBasis}.vv
 Builder.vvValue = $(call _vvEnc,{command},{@})
 
-define Builder.vvRule
-_vv =
--include {vvFile}
-ifneq "$$(_vv)" "{vvValue}"
-  {@}: $(_forceTarget)
-endif
-
-endef
 
 # $(call _vvEnc,DATA,OUTFILE) : Encode DATA to be shell-safe (within single
 #   quotes) and Make-safe (within double-quotes or RHS of assignment) and
@@ -278,12 +280,9 @@ _vvEnc = .$(subst ',`,$(subst ",!`,$(subst `,!b,$(subst $$,!S,$(subst $(\n),!n,$
 # $(call _lazy,$$(info X=$$X))
 _lazy = $(subst $$,$(\e),$1)
 
-# Format recipe lines and escape for rule-phase expansion. Un-escape
+# Indent recipe lines and escape them for rule-phase expansion.  Un-escape
 # _lazy encoding to enable on-demand execution of functions.
-_recipeEnc = $(subst $(\e),$$,$(subst $$,$$$$,$1))
-
-# Remove empty lines, prefix remaining lines with \t
-_recipeIndent = $(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))
+_recipe = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))))
 
 
 #--------------------------------
