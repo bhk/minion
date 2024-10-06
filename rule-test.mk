@@ -69,3 +69,9 @@ endef
 
 include $(MINION)
 
+# 3200 create cache (N=1)
+#  950 create cache (N=12)
+#  800 create cache (N=50)
+#  600 $(call _evalRules,Alias(mongo))
+#  340 $(call _rollup,Alias(mongo))
+#   57 make nada (built cache)

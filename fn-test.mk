@@ -252,9 +252,9 @@ $(call _expectEQ,\
   $(call get,inPairs,Inf(x)),\
   C(a.c)$$.out/C.c/a.o C(b.cpp)$$.out/C.cpp/b.o C(Dup(c.c))$$.out/C.c_/dup/c.o d.o)
 
-# _recipeIndent
+# _recipe
 
-$(call _expectEQ,$(call _recipeIndent,$(\n)a$(\n)),$(\t)a$(\n))
+$(call _expectEQ,$(call _recipe,$(\n)a$(\n)),$(\t)a$(\n))
 
 # Validation value logic & _vvEnc
 
@@ -284,7 +284,7 @@ Defer.command = true $(call _lazy,$$($(_argText)))
 Defer.vvFile =
 
 define DeferRule
-.out/Defer/a : a   | 
+.out/Defer/a : a  | 
 	@echo '#-> Defer(a)'
 	@mkdir -p .out/Defer/
 	true $(a)
@@ -294,23 +294,13 @@ endef
 
 $(call _expectEQ,$(call get,rule,Defer(a)),$(value DeferRule))
 
-# _group
-
-$(call _expectEQ,\
-  $(call _group,a b c d e,3),\
-  a$(\n)b$(\n)c d$(\n)e$(\n))
-
-$(call _expectEQ,\
-  $(foreach g,$(call _group,1 2 3 4 5 6 7 8,3),$(strip $g)|),\
-  1 2 3| 4 5 6| 7 8|)
-
 
 # Built-in classes
 
 WVAR = test
 
 define WWrule
-.out/Write/WVAR :    | 
+.out/Write/WVAR :   | 
 	@echo '#-> Write(WVAR)'
 	@mkdir -p .out/Write/
 	@echo '_vv=.@printf !`%b!` `test` > !@.' > .out/Write/WVAR.vv

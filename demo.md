@@ -495,7 +495,7 @@ CC(hello.c) inherits from: CC _CC CCBase _CCBase Builder
 
 {command} is defined by:
 
-   _CCBase.command = {compiler} -c -o {@} {<} {options} -MMD -MP -MF {depsFile}
+   _CCBase.command = {compiler} -c -o {@} {<} {options} -MMD -MP -MF {@}.d
 
 Its value is: 'gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -Wall -Werror -O2   -MMD -MP -MF .out/CC.c/hello.o.d'
 

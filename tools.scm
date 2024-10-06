@@ -176,3 +176,49 @@
 (expect (_relpath "x/b" "x/y") "y")
 (expect (_relpath "a/b/c"
                   "a/x/y") "../x/y")
+
+
+;; Group LIST into sub-lists of length N.
+;;
+;; Usage: (foreach (g (_group list)) ... (_ungroup g) ...)
+
+(define `D "|")
+(define `DD (.. D D))
+(define `D0 (.. D 0))  ;; encodes " "
+(define `D1 (.. D 1))  ;; encodes D
+(define `D_ (.. D " "))
+
+(define (_group list n)
+  &native
+  (define `dgroup (patsubst "%" D (wordlist 1 n list)))
+  ;; MARKERS = for every word in LIST, D except DD at every Nth
+  (define `markers (subst dgroup (.. dgroup D) (patsubst "%" D list)))
+
+  (if list
+      (subst DD ""    ;; don't collapse every Nth
+             D_ D0    ;; collapse all other word boundaries
+             (.. (join (subst D D1 list) markers) " "))))
+
+(define (_ungroup groups)
+  &native
+  (subst D0 " "
+         D1 D
+         groups))
+
+(export (native-name _group) nil)
+(export (native-name _ungroup) nil)
+
+(expect (_group "a | c d e f g h" 3)
+        "a|0|1|0c d|0e|0f g|0h|0")
+
+(define `(group-test list n out)
+  (expect (foreach (g (_group list n))
+            (.. "<" (foreach (i (_ungroup g)) i) ">"))
+          out))
+
+(group-test "a b c"    1 "<a> <b> <c>")
+(group-test ""         2 "")
+(group-test "a"        2 "<a>")
+(group-test "a b"      2 "<a b>")
+(group-test "a b c"    2 "<a b> <c>")
+(group-test "a b c d e f g h"  3 "<a b c> <d e f> <g h>")

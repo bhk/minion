@@ -203,14 +203,12 @@ Builder.out = {outDir}{outName}
 define Builder.rule
 {@} : {^} $(call get,out,{upIDs} {depsIDs}) | $(call get,out,{ooIDs})
 $(call _recipe,{recipe})
-$(foreach F,{vvFile},\
-_vv =
+$(foreach F,{vvFile},_vv =
 -include $F
 ifneq "$$(_vv)" "{vvValue}"
   {@}: $(_forceTarget)
 endif
 )
-
 endef
 
 define Builder.recipe
@@ -378,10 +376,6 @@ _evalRules = $(foreach i,$(call _rollupEx,$(sort $(_isInstance)),$2),$(call _eva
 # Escape an instance argument as a Make function argument
 _escArg = $(subst $[,$$[,$(subst $],$$],$(subst $;,$$;,$(subst $$,$$$$,$1))))
 
-# $(foreach g,$(call _group,LIST,N),$(foreach i,$(strip $g), PER-ITEM), PER-GROUP)
-_groupx = $(subst $(\n)x,,$(subst $(\n) ,$(\n),$(join $1,$(subst .,$(\n),$(subst $2,$2x,$(patsubst %,.,$1))))))
-_group = $(call _groupx,$1,$(patsubst %,.,$(wordlist 1,$2,$1)))
-
 # _cache_rule : Include a generated makefile that defines rules for IDs in
 #    $(minion_cache) and their transitive dependencies, excluding IDs in
 #    $(minion_cache_exclude).  Defer recipe expansion to the rule processing
@@ -404,7 +398,7 @@ define _cache-recipe
 @mkdir -p $(@D)
 @echo '_cachedIDs = $1' > $@_tmp_
 $(foreach g,$(call _group,$1,$(_cache-N)),
-@$(call _printf,$(foreach i,$(strip $g),
+@$(call _printf,$(foreach i,$(call _ungroup,$g),
 $(call get,rule,$i)
 $(if $2,_$i_needs = $(filter $2,$(call _depsOf,$i))
 ))) >> $@_tmp_)
@@ -613,6 +607,8 @@ _depsOf = $(or $(value _&deps-$1),$(call _set,_&deps-$1,$(or $(sort $(foreach w,
 _rollup = $(sort $(foreach w,$(filter %$],$1),$w $(call _depsOf,$w)))
 _rollupEx = $(if $1,$(call _rollupEx,$(filter-out $3 $1,$(sort $(filter %$],$(call get,needs,$(filter-out $2,$1))) $(foreach w,$(filter $2,$1),$(value _$w_needs)))),$2,$3 $1),$(filter-out $2,$3))
 _relpath = $(if $(filter /%,$2),$2,$(if $(filter ..,$(subst /, ,$1)),$(error _relpath: '..' in $1),$(or $(foreach w,$(filter %/%,$(word 1,$(subst /,/% ,$1))),$(call _relpath,$(patsubst $w,%,$1),$(if $(filter $w,$2),$(patsubst $w,%,$2),../$2))),$2)))
+_group = $(if $1,$(subst | ,|0,$(subst ||,,$(join $(subst |,|1,$1),$(subst $(patsubst %,|,$(wordlist 1,$2,$1)),$(patsubst %,|,$(wordlist 1,$2,$1))|,$(patsubst %,|,$1))) )))
+_ungroup = $(subst |1,|,$(subst |0, ,$1))
 
 # outputs.scm
 
