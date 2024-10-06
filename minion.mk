@@ -202,7 +202,7 @@ Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
 Builder.out = {outDir}{outName}
 define Builder.rule
 {@} : {^} {up^} {deps^} | $(call get,out,{ooIDs})
-$(call _recipeEnc,$(call _recipe,
+$(call _recipeEnc,$(call _recipeIndent,
 $(if {message},@echo $(call _shellQuote,{message}))
 $(if {mkdirs},@mkdir -p {mkdirs})
 $(if {vvFile},@echo '_vv={vvValue}' > {vvFile})
@@ -283,7 +283,7 @@ _lazy = $(subst $$,$(\e),$1)
 _recipeEnc = $(subst $(\e),$$,$(subst $$,$$$$,$1))
 
 # Remove empty lines, prefix remaining lines with \t
-_recipe = $(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))
+_recipeIndent = $(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))
 
 
 #--------------------------------
@@ -455,7 +455,7 @@ $1 is an instance.
 
 {out} = $(call get,out,$1)
 
-{command} = $(call _qvn,$(call _recipeEnc,$(call get,command,$1)))
+{command} = $(call _qvn,$(call get,command,$1))
 
 $(_helpDeps)
 endef

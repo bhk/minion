@@ -252,9 +252,9 @@ $(call _expectEQ,\
   $(call get,inPairs,Inf(x)),\
   C(a.c)$$.out/C.c/a.o C(b.cpp)$$.out/C.cpp/b.o C(Dup(c.c))$$.out/C.c_/dup/c.o d.o)
 
-# _recipe
+# _recipeIndent
 
-$(call _expectEQ,$(call _recipe,$(\n)a$(\n)),$(\t)a$(\n))
+$(call _expectEQ,$(call _recipeIndent,$(\n)a$(\n)),$(\t)a$(\n))
 
 # Validation value logic & _vvEnc
 
