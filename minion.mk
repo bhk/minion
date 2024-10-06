@@ -449,7 +449,7 @@ $1 is an instance.
 
 {out} = $(call get,out,$1)
 
-{command} = $(call _qvn,$(call get,command,$1))
+$(foreach p,$(if $(call _describeProp,$1,command),command,rule),{$p} = $(call _qvn,$(call get,$p,$1)))
 
 $(_helpDeps)
 endef

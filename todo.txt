@@ -1,5 +1,4 @@
 Minion TODOs:
- - `help C(A)`  ->  show {rule} if {command} is not defined
  - Graph & Alias(graph) ?
  - Exec/Run/Test & inferClasses...  makes no sense for any but first input
  - Copyright?
@@ -108,3 +107,4 @@ Changes from main:
      @echo 'a:' | $(MAKE) -pf - | sed '/^[^: ]*%[^: ]*\::* /!d' >> {@}_tmp_
  - Optimize cache generation (multiple rules per printf command)
  - Added Builder.{recipe}
+ - `help C(A)`  ->  show {rule} if {command} is not defined
