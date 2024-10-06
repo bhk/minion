@@ -1,17 +1,4 @@
-
 Minion TODOs:
- - Makefile.lazyCommand does not need to call _recipe
- - Makefile -> RuleCache
-
-     RuleCache.rule = {out}: $(MAKEFILE_LIST) ; $(call _lazy,$$(call get,lazyRecipe,$(call _escArg,$(_self))))
-     RuleCache.needs =
-     # only one RuleCache is supported
-     RuleCache.out = $(VOUTDIR)rules.mk
-     RuleCache.@ = {out}
-     define RuleCache.lazyRecipe
-     ...
-     endef
-
  - Builder.rule should use {recipe}
 
      # Format recipe lines (prefix with TAB and remove empty lines) and
@@ -64,7 +51,6 @@ Minion TODOs:
  - {exportPrefix} does not need to include space; we can use space before it
  - When overriding {outDir}, .dep files land in same place, but .vv land in original...
  - C(A).inherit = ... ?
- - Gzip/Zip --> GZip
  - _eq, _not, _reverse
  - _eval/_log : swap $1 & $2 ... default $2
  - _uniq
@@ -147,10 +133,15 @@ Minion TODOs:
 ----------------------------------------------------------------
 Changes from main:
 
- - remove Shell
+ - remove Shell, Makefile, Include
  - add Test
  - move Mkdir, Touch, Remove, Zip, Unzip, Tar to "samples.mk"
+ - rename Gzip -> GZip
  - LinkC, LinkC++  -->  CExe, CExe++
  - Compile  -->  CCBase
  - CCBase:  flags -> options,  refactor of {options}
  - make clean V='x' cleans VOUTDIR, not OUTDIR
+ - Removed this: (takes ~18ms, saves about 0?)
+     # Disable Make's built-in implicit pattern rules (they can slow things down)
+     @echo 'a:' | $(MAKE) -pf - | sed '/^[^: ]*%[^: ]*\::* /!d' >> {@}_tmp_
+ - Optimize cache generation (multiple rules per printf command)

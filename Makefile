@@ -39,9 +39,9 @@ $(MO): *.scm minion.mk Makefile
 	cat $@.1 $@.2 > $@
 
 $(TO): $(MO) fn-test.mk rule-test.mk
+	mkdir -p $(@D)
 	make -f fn-test.mk MINION=$<
 	( make -f rule-test.mk MINION=$< ) > $@.log || ( cat $@.log ; false )
-	mkdir -p $(@D)
 	touch $@
 
 $(EO): minion.mk demo/*

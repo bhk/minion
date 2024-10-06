@@ -315,35 +315,6 @@ _HelpGoal.inherit = Alias
 _HelpGoal.command = @true$(call _lazy,$$(call _help!,$(call _escArg,$(_argText))))
 
 
-# Makefile(VAR) : Generate a makefile that includes rules for IDs in $(VAR)
-#   and their transitive dependencies, excluding IDs in $(VAR_exclude).
-#
-#   Command expansion is deferred to the rule processing phase, so when the
-#   makefile is fresh we avoid the time it takes to compute all the rules.
-#
-Makefile.inherit = Builder
-Makefile.in = $(MAKEFILE_LIST)
-Makefile.vvFile = # too costly; defeats the purpose
-Makefile.command = $(call _lazy,$$(call get,lazyCommand,$(call _escArg,$(_self))))
-Makefile.excludeIDs = $(filter %$],$(call _expand,$($(_argText)_exclude)))
-Makefile.IDs = $(filter-out {excludeIDs},$(call _rollup,$(call _expand,@$(_argText))))
-define Makefile.lazyCommand
-@rm -f {@}
-@echo '_cachedIDs = {IDs}' > {@}_tmp_
-$(foreach i,{IDs},
-@$(call _printf,$(call get,rule,$i)
-$(if {excludeIDs},_$i_needs = $(filter {excludeIDs},$(call _depsOf,$i))
-)) >> {@}_tmp_)
-@mv {@}_tmp_ {@}
-endef
-
-# Include(MAKEFILE) : Include a makefile.
-#
-Include.out =
-Include.needs = $(_argText)
-Include.rule = -include $(call get,out,$(_argText))
-
-
 #--------------------------------
 # Variable & Function Definitions
 #--------------------------------
@@ -407,6 +378,40 @@ _evalRules = $(foreach i,$(call _rollupEx,$(sort $(_isInstance)),$2),$(call _eva
 
 # Escape an instance argument as a Make function argument
 _escArg = $(subst $[,$$[,$(subst $],$$],$(subst $;,$$;,$(subst $$,$$$$,$1))))
+
+# $(foreach g,$(call _group,LIST,N),$(foreach i,$(strip $g), PER-ITEM), PER-GROUP)
+_groupx = $(subst $(\n)x,,$(subst $(\n) ,$(\n),$(join $1,$(subst .,$(\n),$(subst $2,$2x,$(patsubst %,.,$1))))))
+_group = $(call _groupx,$1,$(patsubst %,.,$(wordlist 1,$2,$1)))
+
+# _cache_rule : Include a generated makefile that defines rules for IDs in
+#    $(minion_cache) and their transitive dependencies, excluding IDs in
+#    $(minion_cache_exclude).  Defer recipe expansion to the rule processing
+#    phase, because the recipe involves computing every rule.
+#
+define _cache-rule
+$(VOUTDIR)cache.mk : $(MAKEFILE_LIST) ; $(call _cache-recipe,$(_cache-ids),$(_cache-excludes))
+-include $(VOUTDIR)cache.mk
+endef
+
+_cache-excludes = $(filter %$],$(call _expand,$(minion_cache_exclude)))
+_cache-ids = $(filter-out $(_cache-excludes),$(call _rollup,$(call _expand,@minion_cache)))
+
+# write out this many rules per printf command line
+_cache-N = 12
+
+# $1=CACHED-IDS  $2=EXCLUDED-IDS
+define _cache-recipe
+@echo 'Updating Minion cache...'
+@mkdir -p $(@D)
+@echo '_cachedIDs = $1' > $@_tmp_
+$(foreach g,$(call _group,$1,$(_cache-N)),
+@$(call _printf,$(foreach i,$(strip $g),
+$(call get,rule,$i)
+$(if $2,_$i_needs = $(filter $2,$(call _depsOf,$i))
+))) >> $@_tmp_)
+@mv $@_tmp_ $@
+endef
+
 
 #--------------------------------
 # Help system
@@ -545,9 +550,10 @@ define _epilogue
     # cache when handling `help` (targets may conflict with cache file) or
     # `clean` (so we can recover from a corrupted cache file).
   else ifdef minion_cache
-    $(call _evalRules,Include(Makefile(minion_cache)))
-    # If _cachedIDs is unset, the cache must not exist and Make will
-    # restart, so skip rule computation.
+    $(call _eval,eval-cache,$(value _cache-rule))
+    # If the cache makefile does NOT exist yet then _cachedIDs is unset and
+    # will be set to "%" here to disable _evalRules, because Make will
+    # immediately restart and rule computation would be a waste of time.
     _cachedIDs ?= %
   endif
 

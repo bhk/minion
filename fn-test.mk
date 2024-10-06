@@ -294,6 +294,17 @@ endef
 
 $(call _expectEQ,$(call get,rule,Defer(a)),$(value DeferRule))
 
+# _group
+
+$(call _expectEQ,\
+  $(call _group,a b c d e,3),\
+  a$(\n)b$(\n)c d$(\n)e$(\n))
+
+$(call _expectEQ,\
+  $(foreach g,$(call _group,1 2 3 4 5 6 7 8,3),$(strip $g)|),\
+  1 2 3| 4 5 6| 7 8|)
+
+
 # Built-in classes
 
 WVAR = test
