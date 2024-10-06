@@ -491,7 +491,7 @@ target file.
 
 ```console
 $ make help 'CC(hello.c).command'
-CC(hello.c) inherits from: CC _CC CCBase _CCBase Builder
+CC(hello.c) inherits from: CC _CC CCBase _CCBase Builder _Builder
 
 {command} is defined by:
 
@@ -578,7 +578,7 @@ inherits.
 
 ```console
 $ make help 'CCg(hello.c).objFlags'
-CCg(hello.c) inherits from: CCg CC _CC CCBase _CCBase Builder
+CCg(hello.c) inherits from: CCg CC _CC CCBase _CCBase Builder _Builder
 
 {objFlags} is defined by:
 
@@ -666,7 +666,7 @@ include ../minion.mk
 ```
 ```console
 $ make V=debug help 'CC(hello.c).objFlags'
-CC(hello.c) inherits from: CC CC-debug _CC CCBase _CCBase Builder
+CC(hello.c) inherits from: CC CC-debug _CC CCBase _CCBase Builder _Builder
 
 {objFlags} is defined by:
 

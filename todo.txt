@@ -1,42 +1,4 @@
 Minion TODOs:
- - Builder.rule should use {recipe}
-
-     # Format recipe lines (prefix with TAB and remove empty lines) and
-     # escape for rule-phase expansion. Un-escape _lazy encoding to enable
-     # on-demand execution of functions.
-     _recipeFmt = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))))
-
-     define Builder.rule
-     {@} : {^} {up^} {deps^} | $(call get,out,{ooIDs})
-     $(call _recipeFmt,$(call _recipe,{recipe}))
-     {vvRule}
-     endef
-
-     define Builder.recipe
-     $(if {message},@echo $(call _shellQuote,{message}))
-     $(if {mkdirs},@mkdir -p {mkdirs})
-     $(if {vvFile},@echo '_vv={vvValue}' > {vvFile})
-     {command}
-     endef
-
-     _ifnz = $(if $1,$(subst %%,$1,$2))
-     define Builder.recipe
-     $(call _ifnz,{message},@echo $(call _shellQuote,%%))
-     $(call _ifnz,{mkdirs},@mkdir -p %%)
-     $(foreach F,{vvFile},@echo '_vv={vvValue}' > $F)
-     {command}
-     endef
-
-     define Builder.vvRule
-     $(foreach F,{vvFile),
-     _vv =
-     -include $F
-     ifneq "$$(_vv)" "{vvValue}"
-       {@}: $(_forceTarget)
-     endif
-     )
-     endef
-
  - `help C(A)`  ->  show {rule} if {command} is not defined
  - Graph & Alias(graph) ?
  - Exec/Run/Test & inferClasses...  makes no sense for any but first input
@@ -145,3 +107,4 @@ Changes from main:
      # Disable Make's built-in implicit pattern rules (they can slow things down)
      @echo 'a:' | $(MAKE) -pf - | sed '/^[^: ]*%[^: ]*\::* /!d' >> {@}_tmp_
  - Optimize cache generation (multiple rules per printf command)
+ - Added Builder.{recipe}

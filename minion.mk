@@ -7,6 +7,7 @@
 # inheritance.  User makefiles may not override other make variables defined
 # in this file, except for a few cases where "?=" is used (see below).
 
+Builder.inherit ?= _Builder
 CC++.inherit ?= _CC++
 CC.inherit ?= _CC
 CExe++.inherit ?= _CExe++
@@ -197,10 +198,10 @@ _Write.in =
 # Builder(ARGS):  Base class for builders.  See minion.md for details.
 
 # Core builder properties
-Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
-Builder.out = {outDir}{outName}
+_Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
+_Builder.out = {outDir}{outName}
 
-define Builder.rule
+define _Builder.rule
 {@} : {^} $(call get,out,{upIDs} {depsIDs}) | $(call get,out,{ooIDs})
 $(call _recipe,{recipe})
 $(foreach F,{vvFile},_vv =
@@ -211,7 +212,7 @@ endif
 )
 endef
 
-define Builder.recipe
+define _Builder.recipe
 $(if {message},@echo $(call _shellQuote,{message}))
 $(if {mkdirs},@mkdir -p {mkdirs})
 $(foreach F,{vvFile},@echo '_vv={vvValue}' > $F)
@@ -219,52 +220,52 @@ $(foreach F,{vvFile},@echo '_vv={vvValue}' > $F)
 endef
 
 # Shorthands
-Builder.@ = {out}
-Builder.< = $(firstword {^})
-Builder.^ = {inFiles}
+_Builder.@ = {out}
+_Builder.< = $(firstword {^})
+_Builder.^ = {inFiles}
 
-Builder.in = $(_args)
+_Builder.in = $(_args)
 # list of ([ID,]FILE) pairs for inputs
-Builder.inPairs = $(call _inferPairs,$(foreach i,$(call _expand,{in},in),$i$(if $(filter %$],$i),$$$(call get,out,$i))),{inferClasses})
-Builder.inIDs = $(call _pairIDs,{inPairs})
-Builder.inFiles = $(call _pairFiles,{inPairs})
+_Builder.inPairs = $(call _inferPairs,$(foreach i,$(call _expand,{in},in),$i$(if $(filter %$],$i),$$$(call get,out,$i))),{inferClasses})
+_Builder.inIDs = $(call _pairIDs,{inPairs})
+_Builder.inFiles = $(call _pairFiles,{inPairs})
 
 # up: dependencies specified by the class
-Builder.up =
-Builder.upIDs = $(call _expand,{up},up)
-Builder.up^ = $(call get,out,{upIDs})
+_Builder.up =
+_Builder.upIDs = $(call _expand,{up},up)
+_Builder.up^ = $(call get,out,{upIDs})
 
 # oo: order-only dependencies.
-Builder.oo =
-Builder.ooIDs = $(call _expand,{oo},oo)
+_Builder.oo =
+_Builder.ooIDs = $(call _expand,{oo},oo)
 
 # deps: direct dependencies not covered by {in} or {up}
-Builder.deps =
-Builder.depsIDs = $(call _expand,{deps})
-Builder.deps^ = $(call get,out,{depsIDs})
+_Builder.deps =
+_Builder.depsIDs = $(call _expand,{deps})
+_Builder.deps^ = $(call get,out,{depsIDs})
 
 # inferClasses: a list of CLASS.EXT patterns
-Builder.inferClasses =
+_Builder.inferClasses =
 
-Builder.outExt = %
-Builder.outDir = $(dir {outBasis})
-Builder.outName = $(foreach e,$(notdir {outBasis}),$(basename $e)$(subst %,$(suffix $e),{outExt}))
-Builder.outBasis = $(VOUTDIR)$(call _outBasis,$(_class),$(_argText),{outExt},$(call get,out,$(filter $(_arg1),$(word 1,$(call _expand,{in},in)))),$(_arg1))
+_Builder.outExt = %
+_Builder.outDir = $(dir {outBasis})
+_Builder.outName = $(foreach e,$(notdir {outBasis}),$(basename $e)$(subst %,$(suffix $e),{outExt}))
+_Builder.outBasis = $(VOUTDIR)$(call _outBasis,$(_class),$(_argText),{outExt},$(call get,out,$(filter $(_arg1),$(word 1,$(call _expand,{in},in)))),$(_arg1))
 
 # message to be displayed when the command executes (if non-empty)
-Builder.message ?= \#-> $(_self)
+_Builder.message ?= \#-> $(_self)
 
 # directories to be created prior to commands in recipe
-Builder.mkdirs = $(sort $(dir {@} {vvFile}))
+_Builder.mkdirs = $(sort $(dir {@} {vvFile}))
 
 # This may be prepended to individual command lines to export environment variables
 # listed in {exports}
-Builder.exportPrefix = $(foreach v,{exports},$v=$(call _shellQuote,{$v}) )
-Builder.exports =
+_Builder.exportPrefix = $(foreach v,{exports},$v=$(call _shellQuote,{$v}) )
+_Builder.exports =
 
 # Validity values
-Builder.vvFile ?= {outBasis}.vv
-Builder.vvValue = $(call _vvEnc,{command},{@})
+_Builder.vvFile ?= {outBasis}.vv
+_Builder.vvValue = $(call _vvEnc,{command},{@})
 
 
 # $(call _vvEnc,DATA,OUTFILE) : Encode DATA to be shell-safe (within single
