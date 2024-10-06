@@ -314,9 +314,9 @@ _Goal.in = $(_argText)
 _HelpGoal.inherit = Alias
 _HelpGoal.command = @true$(call _lazy,$$(call _help!,$(call _escArg,$(_argText))))
 
+
 # Makefile(VAR) : Generate a makefile that includes rules for IDs in $(VAR)
 #   and their transitive dependencies, excluding IDs in $(VAR_exclude).
-#   Include rules that cancel Make's built-in implicit pattern rules.
 #
 #   Command expansion is deferred to the rule processing phase, so when the
 #   makefile is fresh we avoid the time it takes to compute all the rules.
@@ -328,17 +328,14 @@ Makefile.command = $(call _lazy,$$(call get,lazyCommand,$(call _escArg,$(_self))
 Makefile.excludeIDs = $(filter %$],$(call _expand,$($(_argText)_exclude)))
 Makefile.IDs = $(filter-out {excludeIDs},$(call _rollup,$(call _expand,@$(_argText))))
 define Makefile.lazyCommand
-$(call _recipe,
 @rm -f {@}
 @echo '_cachedIDs = {IDs}' > {@}_tmp_
 $(foreach i,{IDs},
 @$(call _printf,$(call get,rule,$i)
 $(if {excludeIDs},_$i_needs = $(filter {excludeIDs},$(call _depsOf,$i))
 )) >> {@}_tmp_)
-@echo 'a:' | $(MAKE) -pf - | sed '/^[^: ]*%[^: ]*\::* /!d' >> {@}_tmp_
-@mv {@}_tmp_ {@})
+@mv {@}_tmp_ {@}
 endef
-
 
 # Include(MAKEFILE) : Include a makefile.
 #
