@@ -280,6 +280,15 @@ _Builder.@ = {out}
 _Builder.< = $(firstword {^})
 _Builder.^ = {inFiles}
 
+# Diagnose someone accidentally using "$@" instead of "{@}".  Cache file
+# generation requires {rule} evaluation during rule processing, which will
+# break if property definitions use "$@", "$<", etc.
+@ = $(call _badAuto,@,$0)
+< = $(call _badAuto,<,$0)
+^ = $(call _badAuto,^,$0)
+
+_badAuto = $(call _error,"$$$1" was evaluated prior to rule processing$(\n)$(call _whereAmI,$2))
+
 _Builder.in = $(_args)
 # list of ([ID,]FILE) pairs for inputs
 _Builder.inPairs = $(call _inferPairs,$(foreach i,$(call _expand,{in},in),$i$(if $(filter %$],$i),$$$(call get,out,$i))),{inferClasses})
@@ -620,6 +629,7 @@ _namedArgs = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))
 _namedArg1 = $(word 1,$(_namedArgs))
 _describeProp = $(if $1,$(if $(filter u%,$(flavor $(word 1,$1).$2)),$(call _describeProp,$(or $(_idC),$(_pup)),$2),$(call _describeVar,$(word 1,$1).$2,   )$(if $(and $(filter r%,$(flavor $(word 1,$1).$2)),$(findstring {inherit},$(value $(word 1,$1).$2))),$(\n)$(\n)...wherein {inherit} references:$(\n)$(\n)$(call _describeProp,$(or $(_idC),$(_pup)),$2))))
 _chain = $(if $1,$(call _chain,$(_pup),$2 $(word 1,$1)),$(filter %,$2))
+_whereAmI = during evaluation of $(if $(filter ~%,$1),'$(patsubst ~%,%,$(subst ],$],$1))',$(if $(filter &%,$1),'$(patsubst &%,%,$1)',$$($1))$(patsubst %, in context of %,$(_self)))
 
 # tools.scm
 

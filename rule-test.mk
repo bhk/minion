@@ -91,4 +91,17 @@ define Alias(speed-test).command
 endef
 
 
+#----------------------------------------------------------------
+# Test reporting of references to automatic variables
+#----------------------------------------------------------------
+
+# during per-instance property
+Alias(warn1-test).command = echo $@
+# during class property
+Alias(warn2-test).command = echo {badAt}
+Alias.badAt = $@
+# during other function
+Alias(warn3-test).command = echo $(call badAt)
+badAt = $@
+
 include $(MINION)

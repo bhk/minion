@@ -336,6 +336,26 @@
 (export (native-name _chain) nil)
 
 
+;; Detect (as best as we can) what context we are in
+;;
+;; FN = name of function (e.g. $0 during evaluation of a variable)
+(define (_whereAmI fn)
+  &native
+
+  (define `(q str) (.. "'" str "'"))
+  (.. "during evaluation of "
+      (if (filter "~%" fn)
+          ;; compiled C(A).P function
+          (q (patsubst "~%" "%" (subst "]" ")" fn)))
+          (.. (if (filter "&%" fn)
+                  ;; "&PARENTS.P"
+                  (q (patsubst "&%" "%" fn))
+                  ;; some other function
+                  (.. "$(" fn ")"))
+              (patsubst "%" " in context of %" _self)))))
+
+(export (native-name _whereAmI) 1)
+
 ;;--------------------------------
 ;; Tests
 ;;--------------------------------
@@ -468,3 +488,17 @@
             "   A.i :=  (A.i) "))
 
 (expect (_describeProp "UNDEF(a)" "foo") "")
+
+;; _whereAmI
+(set-native-fn "C(a).w0" "$(call _whereAmI,$0)")
+(set-native-fn "C.w1" "$(call _whereAmI,$0)")
+(set-native-fn "C.w2" "$(call _whereAmI,foo)")
+
+(expect (get "w0" "C(a)")
+        "during evaluation of 'C(a).w0'")
+(expect (get "w1" "C(a)")
+        "during evaluation of 'C.w1' in context of C(a)")
+(expect (get "w2" "C(a)")
+        "during evaluation of $(foo) in context of C(a)")
+(expect (_whereAmI "foo")
+        "during evaluation of $(foo)")
