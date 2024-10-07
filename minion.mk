@@ -8,6 +8,7 @@
 # in this file, except for a few cases where "?=" is used (see below).
 
 Builder.inherit ?= _Builder
+Alias.inherit ?= _Alias
 CC++.inherit ?= _CC++
 CC.inherit ?= _CC
 CExe++.inherit ?= _CExe++
@@ -21,7 +22,47 @@ Phony.inherit ?= _Phony
 Print.inherit ?= _Print
 Run.inherit ?= _Run
 Test.inherit ?= _Test
+Variant.inherit ?= _Variant
+Variants.inherit ?= _Variants
 Write.inherit ?= _Write
+
+
+#--------------------------------
+# Unprefixed Variables
+#--------------------------------
+
+# V defaults to the first word of Variants.all
+V ?= $(word 1,$(Variants.all))
+
+# All Minion build products are placed under this directory
+OUTDIR ?= .out/
+
+# Build products for the current V are placed here
+VOUTDIR ?= $(OUTDIR)$(if $V,$V/)
+
+# $(call minion_alias,GOAL) returns an instance if GOAL is an alias,
+#   or an empty value otherwise.  User makefiles can override this to
+#   support other types of aliases.
+minion_alias ?= $(_aliasID)
+minion_cache ?=
+minion_start ?=
+
+# Character constants
+
+\s := $(if ,, )
+\t := $(if ,,	)
+\H := \#
+[[ := {
+]] := }
+[ := (
+] := )
+; := ,
+define \n
+
+
+endef
+# This character may not appear in `command` values, except via _lazy.
+\e = 
 
 
 #--------------------------------
@@ -31,16 +72,16 @@ Write.inherit ?= _Write
 # Alias(TARGETNAME) : Generate a phony rule whose {out} matches TARGETNAME.
 #     {command} and/or {in} are supplied by the user makefile.
 #
-Alias.inherit = Phony
-Alias.out = $(subst :,\:,$(_argText))
-Alias.in =
+_Alias.inherit = Phony
+_Alias.out = $(subst :,\:,$(_argText))
+_Alias.in =
 
 
 # Variants(TARGETNAME) : Build {all} variants of TARGETNAME.  Each variant
 #    is defined in a separate rule so they can all proceed concurrently.
 #
-Variants.inherit = Phony
-Variants.in = $(foreach v,{all},_Variant($(_argText),V:$v))
+_Variants.inherit = Phony
+_Variants.in = $(foreach v,{all},_Variant($(_argText),V:$v))
 
 
 # Variant(TARGETNAME,V:VARIANT) : Build VARIANT of TARGETNAME.
@@ -203,7 +244,7 @@ _Write.in =
 Graph.inherit = Phony
 Graph.in =
 Graph.inExp = $(call Graph_filter,$(call _expand,$(_args)))
-Graph.rule = {@}: ; @true $$(info $$(call _graph,Graph_get-,$$(call _graph-trav,Graph_get-children,$(call _escArg,{inExp}))))
+Graph.rule = {@}: ; @true $$(info $$(call _graph,Graph_get-,$$(call _graphTrav,Graph_get-children,$(call _escArg,{inExp}))))
 
 Graph_filter = $(filter-out $(patsubst %,%$[%,$(Graph_IGNORE)),$(filter $(if $(Graph_FILES),%,%$]),$1))
 Graph_get-children = $(call Graph_filter,$(call get,needs,$1))
@@ -283,22 +324,6 @@ _Builder.vvFile ?= {outBasis}.vv
 _Builder.vvValue = $(call _vvEnc,{command},{@})
 
 
-# $(call _vvEnc,DATA,OUTFILE) : Encode DATA to be shell-safe (within single
-#   quotes) and Make-safe (within double-quotes or RHS of assignment) and
-#   echo-safe (across /bin/echo and various shell builtins)
-_vvEnc = .$(subst ',`,$(subst ",!`,$(subst `,!b,$(subst $$,!S,$(subst $(\n),!n,$(subst $(\t),!+,$(subst \#,!H,$(subst $2,!@,$(subst \,!B,$(subst !,!1,$1)))))))))).#'
-
-# $(call _lazy,MAKESRC) : Encode MAKESRC for inclusion in a recipe so that
-# it will be expanded when and if the recipe is executed.  Otherwise, all
-# "$" characters will be escaped to avoid expansion by Make. For example:
-# $(call _lazy,$$(info X=$$X))
-_lazy = $(subst $$,$(\e),$1)
-
-# Indent recipe lines and escape them for rule-phase expansion.  Un-escape
-# _lazy encoding to enable on-demand execution of functions.
-_recipe = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))))
-
-
 #--------------------------------
 # Minion internal classes
 #--------------------------------
@@ -329,42 +354,8 @@ _HelpGoal.command = @true$(call _lazy,$$(call _help!,$(call _escArg,$(_argText))
 
 
 #--------------------------------
-# Variable & Function Definitions
+# Function definitions
 #--------------------------------
-
-# V defaults to the first word of Variants.all
-V ?= $(word 1,$(Variants.all))
-
-# All Minion build products are placed under this directory
-OUTDIR ?= .out/
-
-# Build products for the current V are placed here
-VOUTDIR ?= $(OUTDIR)$(if $V,$V/)
-
-# Is $1 a "safe" arg to "rm -rf"?  (Catch accidental ".", "..", "/" etc.)
-_safeToClean = $(filter-out . ..,$(subst /, ,$1))
-
-# $(call minion_alias,GOAL) returns an instance if GOAL is an alias,
-#   or an empty value otherwise.  User makefiles can override this to
-#   support other types of aliases.
-minion_alias ?= $(_aliasID)
-
-# Character constants
-
-\s := $(if ,, )
-\t := $(if ,,	)
-\H := \#
-[[ := {
-]] := }
-[ := (
-] := )
-; := ,
-define \n
-
-
-endef
-# This character may not appear in `command` values, except via _lazy.
-\e = 
 
 _eq? = $(findstring $(subst x$1,1,x$2),1)
 _shellQuote = '$(subst ','\'',$1)'#'  (comment to fix font coloring)
@@ -392,28 +383,46 @@ _evalRules = $(foreach i,$(call _rollupEx,$(sort $(_isInstance)),$2),$(call _eva
 # Escape an instance argument as a Make function argument
 _escArg = $(subst $[,$$[,$(subst $],$$],$(subst $;,$$;,$(subst $$,$$$$,$1))))
 
+# Is $1 a "safe" arg to "rm -rf"?  (Catch accidental ".", "..", "/" etc.)
+_safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
+
+# $(call _vvEnc,DATA,OUTFILE) : Encode DATA to be shell-safe (within single
+#   quotes) and Make-safe (within double-quotes or RHS of assignment) and
+#   echo-safe (across /bin/echo and various shell builtins)
+_vvEnc = .$(subst ',`,$(subst ",!`,$(subst `,!b,$(subst $$,!S,$(subst $(\n),!n,$(subst $(\t),!+,$(subst \#,!H,$(subst $2,!@,$(subst \,!B,$(subst !,!1,$1)))))))))).#'
+
+# $(call _lazy,MAKESRC) : Encode MAKESRC for inclusion in a recipe so that
+#    it will be expanded when and if the recipe is executed.  Otherwise, all
+#    "$" characters will be escaped to avoid expansion by Make. For example:
+#    $(call _lazy,$$(info X=$$X))
+_lazy = $(subst $$,$(\e),$1)
+
+# Indent recipe lines and escape them for rule-phase expansion.  Un-escape
+#    _lazy encoding to enable late (rule phase) evaulation.
+_recipe = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))))
+
 # _cache_rule : Include a generated makefile that defines rules for IDs in
 #    $(minion_cache) and their transitive dependencies, excluding IDs in
 #    $(minion_cache_exclude).  Defer recipe expansion to the rule processing
 #    phase, because the recipe involves computing every rule.
 #
-define _cache-rule
-$(VOUTDIR)cache.mk : $(MAKEFILE_LIST) ; $(call _cache-recipe,$(_cache-ids),$(_cache-excludes))
+define _cacheRule
+$(VOUTDIR)cache.mk : $(MAKEFILE_LIST) ; $(call _cacheRecipe,$(_cacheIds),$(_cacheExcludes))
 -include $(VOUTDIR)cache.mk
 endef
 
-_cache-excludes = $(filter %$],$(call _expand,$(minion_cache_exclude)))
-_cache-ids = $(filter-out $(_cache-excludes),$(call _rollup,$(call _expand,@minion_cache)))
+_cacheExcludes = $(filter %$],$(call _expand,$(minion_cache_exclude)))
+_cacheIds = $(filter-out $(_cacheExcludes),$(call _rollup,$(call _expand,@minion_cache)))
 
 # write out this many rules per printf command line
-_cache-N = 12
+_cacheGroupSize ?= 12
 
 # $1=CACHED-IDS  $2=EXCLUDED-IDS
-define _cache-recipe
+define _cacheRecipe
 @echo 'Updating Minion cache...'
 @mkdir -p $(@D)
 @echo '_cachedIDs = $1' > $@_tmp_
-$(foreach g,$(call _group,$1,$(_cache-N)),
+$(foreach g,$(call _group,$1,$(_cacheGroupSize)),
 @$(call _printf,$(foreach i,$(call _ungroup,$g),
 $(call get,rule,$i)
 $(if $2,_$i_needs = $(filter $2,$(call _depsOf,$i))
@@ -452,13 +461,11 @@ _goalType = $(if $(_isProp),Property,$(if $(_isInstance),$(if $(_isClassInvalid)
 
 _helpDeps = Direct dependencies: $(call _fmtList,$(call get,needs,$1))$(\n)$(\n)Indirect dependencies: $(call _fmtList,$(call filter-out,$(call get,needs,$1),$(call _rollup,$(call get,needs,$1))))
 
-
 define _helpInvalidClass
 "$1" looks like an instance with an invalid class name;
 `$(_idC).inherit` is not defined.  Perhaps a typo?
 
 endef
-
 
 define _helpInstance
 $1 is an instance.
@@ -470,7 +477,6 @@ $(foreach p,$(if $(call _describeProp,$1,command),command,rule),{$p} = $(call _q
 $(_helpDeps)
 endef
 
-
 define _helpIndirect
 $1 is an indirection on the following variable:
 
@@ -478,7 +484,6 @@ $(call _describeVar,$(_ivar),   )
 
 It expands to the following targets: $(call _fmtList,$(call _expand,$1))
 endef
-
 
 define _helpAlias
 $1 is an alias for $(minion_alias).
@@ -490,7 +495,6 @@ $(call _helpDeps,$(minion_alias))
 
 It generates the following rule: $(call _qvn,$(call get,rule,$(minion_alias)))
 endef
-
 
 # $1 = C(A).P; $2 = description;  $(id) = C(A); $p = P
 define _helpPropertyInfo
@@ -506,12 +510,10 @@ endef
 
 _helpProperty = $(foreach p,$(or $(lastword $(subst $].,$] ,$1)),$(error Empty property name in $1)),$(foreach id,$(patsubst %$].$p,%$],$1),$(call _helpPropertyInfo,$1,$(call _describeProp,$(id),$p))))
 
-
 define _helpOther
 Target "$1" is not generated by Minion.  It may be a source
 file or a target defined by a rule in the Makefile.
 endef
-
 
 _help! = \
   $(if $(filter help,$1),\
@@ -562,7 +564,7 @@ define _epilogue
     # cache when handling `help` (targets may conflict with cache file) or
     # `clean` (so we can recover from a corrupted cache file).
   else ifdef minion_cache
-    $(call _eval,eval-cache,$(value _cache-rule))
+    $(call _eval,eval-cache,$(value _cacheRule))
     # If the cache makefile does NOT exist yet then _cachedIDs is unset and
     # will be set to "%" here to disable _evalRules, because Make will
     # immediately restart and rule computation would be a waste of time.
@@ -629,7 +631,7 @@ _relpath = $(if $(filter /%,$2),$2,$(if $(filter ..,$(subst /, ,$1)),$(error _re
 _group = $(if $1,$(subst | ,|0,$(subst ||,,$(join $(subst |,|1,$1),$(subst $(patsubst %,|,$(wordlist 1,$2,$1)),$(patsubst %,|,$(wordlist 1,$2,$1))|,$(patsubst %,|,$1))) )))
 _ungroup = $(subst |1,|,$(subst |0, ,$1))
 _graph = $(if $2,$(call _graph,$1,$(wordlist 2,9999,$2),$(subst ``,` ,$(filter-out %9,$(subst `  ,``,$(patsubst `,` ,$(subst `$(word 1,$2)`,`,$3) `$(subst $(\s),,$(addsuffix `,$(call $1children,$(word 1,$2)))) 9)))),$4$(foreach w,$3,$(if $(filter `,$w), ,|)  )$(\n)$(foreach w,$3,$(if $(findstring `$(word 1,$2)`,$w),+->,$(if $(filter `,$w), ,|)  ))$(if $3, )$(call $1name,$(word 1,$2))$(\n)),$4)
-_graph-trav = $(if $(word 1,$2),$(call _graph-trav,$1,$(call $1,$(word 1,$2)) $(wordlist 2,9999,$2),$(filter-out $(word 1,$2),$3) $(word 1,$2)),$3)
+_graphTrav = $(if $(word 1,$2),$(call _graphTrav,$1,$(call $1,$(word 1,$2)) $(wordlist 2,9999,$2),$(filter-out $(word 1,$2),$3) $(word 1,$2)),$3)
 
 # outputs.scm
 

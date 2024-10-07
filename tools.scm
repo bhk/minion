@@ -235,7 +235,7 @@
 ;;----------------------------------------------------------------
 
 (declare (_graph fn-prefix nodes ?slots ?out) &native)
-(declare (_graph-trav get-children-fn nodes ?seen) &native)
+(declare (_graphTrav get-children-fn nodes ?seen) &native)
 
 (begin
 
@@ -376,13 +376,13 @@
   ;; Return list of descendants of NODES, ordered such that all parents
   ;; precede their children.
   ;;
-  (define (_graph-trav get-children-fn nodes ?seen)
+  (define (_graphTrav get-children-fn nodes ?seen)
     &native
     (define `parent
       (word 1 nodes))
 
     (if parent
-        (_graph-trav get-children-fn
+        (_graphTrav get-children-fn
               (._. (native-call get-children-fn parent) (rest nodes))
               (._. (filter-out parent seen) parent))
         seen))
@@ -390,12 +390,12 @@
 
   (expect
    "A B C D E"
-   (_graph-trav "sample-children" "A"))
+   (_graphTrav "sample-children" "A"))
 
   ;; Display a sample graph.
-  ;; (print (_graph "sample-" (_graph-trav "sample-children" "A"))))
+  ;; (print (_graph "sample-" (_graphTrav "sample-children" "A"))))
 
   nil)
 
 (export (native-name _graph) nil)
-(export (native-name _graph-trav) nil)
+(export (native-name _graphTrav) nil)

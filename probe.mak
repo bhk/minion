@@ -50,6 +50,7 @@ flagdiff: ; @true\
 #
 
 ifdef setflags
+  $(info MAKEFLAGS := $(setflags))
   MAKEFLAGS := $(setflags)
 endif
 
@@ -88,3 +89,14 @@ test-lazy:
 	$(lazyRecipe)
 
 test-lazy2: ; $(lazyRecipe)
+
+
+#
+# Characters in variables
+#
+
+a<b = AltB
+a>b = AgtB
+
+test-char: ; echo $(a<b) $(a>b)
+

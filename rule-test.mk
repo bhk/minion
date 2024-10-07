@@ -61,9 +61,9 @@ Phony(nothing).in =
 define Alias(speed-test).command
   @mkdir -p $(OUTDIR)
   @rm -rf $(OUTDIR)cache.mk
-  time make -f $(thisFile) nada 'minion_cache=Alias(mongo)' '_cache-N=1'
+  time make -f $(thisFile) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=1'
   @rm -rf $(OUTDIR)cache.mk
-  time make -f $(thisFile) nada 'minion_cache=Alias(mongo)' '_cache-N=10'
+  time make -f $(thisFile) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=10'
 endef
 
 
