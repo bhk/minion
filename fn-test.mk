@@ -36,9 +36,9 @@ $(call _expectEQ,$(call _shellQuote,'a'),''\''a'\''')
 $(call _expectEQ,$(call _printfEsc,a\b$(\t)c$(\n)d%e%%f),a\\b\tc\nd%e%%f)
 
 
-# _escArg
+# _escape
 
-$(call _expectEQ,$(call _escArg,(a,b)),$$[a$$;b$$])
+$(call _expectEQ,$(call _escape,(a,b)),$$[a$$;b$$])
 
 
 # Catch & re-enable fatal errors

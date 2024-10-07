@@ -244,7 +244,7 @@ _Write.in =
 Graph.inherit = Phony
 Graph.in =
 Graph.inExp = $(call Graph_filter,$(call _expand,$(_args)))
-Graph.rule = {@}: ; @true $$(info $$(call _graph,Graph_get-,$$(call _graphTrav,Graph_get-children,$(call _escArg,{inExp}))))
+Graph.rule = {@}: ; @true $$(info $$(call _graph,Graph_get-,$$(call _graphTrav,Graph_get-children,$(call _escape,{inExp}))))
 
 Graph_filter = $(filter-out $(patsubst %,%$[%,$(Graph_IGNORE)),$(filter $(if $(Graph_FILES),%,%$]),$1))
 Graph_get-children = $(call Graph_filter,$(call get,needs,$1))
@@ -350,7 +350,7 @@ _Goal.in = $(_argText)
 # _HelpGoal(TARGETNAME) : Generate a rule that invokes `_help!`
 #
 _HelpGoal.inherit = Alias
-_HelpGoal.command = @true$(call _lazy,$$(call _help!,$(call _escArg,$(_argText))))
+_HelpGoal.command = @true$(call _lazy,$$(call _help!,$(call _escape,$(_argText))))
 
 
 #--------------------------------
@@ -380,8 +380,10 @@ _eval = $(_log)$(eval $2)
 # $(call _evalRules,IDs,EXCLUDES) : Evaluate rules of IDs and their transitive dependencies
 _evalRules = $(foreach i,$(call _rollupEx,$(sort $(_isInstance)),$2),$(call _eval,eval-$i,$(call get,rule,$i)))
 
-# Escape an instance argument as a Make function argument
-_escArg = $(subst $[,$$[,$(subst $],$$],$(subst $;,$$;,$(subst $$,$$$$,$1))))
+# Construct Make source code that expands to $1, either on the RHS of a
+#   variable assignment or within a $(call ...) expression.  It is assumed
+#   that $1 does *not* contain '#' or newlines.
+_escape = $(subst $[,$$[,$(subst $],$$],$(subst $;,$$;,$(subst $$,$$$$,$1))))
 
 # Is $1 a "safe" arg to "rm -rf"?  (Catch accidental ".", "..", "/" etc.)
 _safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
