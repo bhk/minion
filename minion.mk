@@ -41,12 +41,12 @@ OUTDIR ?= .out/
 # Build products for the current V are placed here
 VOUTDIR ?= $(OUTDIR)$(if $V,$V/)
 
-# $(call minion_alias,GOAL) returns an instance if GOAL is an alias,
+# $(call minionDetectAlias,GOAL) returns an instance if GOAL is an alias,
 #   or an empty value otherwise.  User makefiles can override this to
 #   support other types of aliases.
-minion_alias ?= $(_aliasID)
-minion_cache ?=
-minion_start ?=
+minionDetectAlias ?= $(_aliasID)
+minionCache ?=
+minionStart ?=
 
 # Character constants
 
@@ -371,8 +371,8 @@ _? = $(call __?,$$(call $1,$2,$3,$4,$5),$(call $1,$2,$3,$4,$5))
 __? = $(info $1 -> $2)$2
 
 # $(call _log,NAME,VALUE): Output "NAME: VALUE" when NAME matches the
-#   pattern in `$(minion_debug)`.
-_log = $(if $(filter $(minion_debug),$1),$(info $1: $(call _qvn,$2)))
+#   pattern in `$(minionDebug)`.
+_log = $(if $(filter $(minionDebug),$1),$(info $1: $(call _qvn,$2)))
 
 # $(call _eval,NAME,VALUE): Log + eval VALUE
 _eval = $(_log)$(eval $2)
@@ -404,17 +404,17 @@ _lazy = $(subst $$,$(\e),$1)
 _recipe = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))))
 
 # _cache_rule : Include a generated makefile that defines rules for IDs in
-#    $(minion_cache) and their transitive dependencies, excluding IDs in
-#    $(minion_cache_exclude).  Defer recipe expansion to the rule processing
-#    phase, because the recipe involves computing every rule.
+#    $(minionCache) and their transitive dependencies, excluding IDs in
+#    $(minionNoCache).  Defer recipe expansion to the rule processing phase,
+#    because the recipe involves computing every rule.
 #
 define _cacheRule
 $(VOUTDIR)cache.mk : $(MAKEFILE_LIST) ; $(call _cacheRecipe,$(_cacheIds),$(_cacheExcludes))
 -include $(VOUTDIR)cache.mk
 endef
 
-_cacheExcludes = $(filter %$],$(call _expand,$(minion_cache_exclude)))
-_cacheIds = $(filter-out $(_cacheExcludes),$(call _rollup,$(call _expand,@minion_cache)))
+_cacheExcludes = $(filter %$],$(call _expand,$(minionNoCache)))
+_cacheIds = $(filter-out $(_cacheExcludes),$(call _rollup,$(call _expand,@minionCache)))
 
 # write out this many rules per printf command line
 _cacheGroupSize ?= 12
@@ -488,14 +488,14 @@ It expands to the following targets: $(call _fmtList,$(call _expand,$1))
 endef
 
 define _helpAlias
-$1 is an alias for $(minion_alias).
-$(if $(filter Alias$[%,$(minion_alias)),
+$1 is an alias for $(minionDetectAlias).
+$(if $(filter Alias$[%,$(minionDetectAlias)),
 It is defined by:$(foreach v,$(filter Alias($1).%,$(.VARIABLES)),
 $(call _describeVar,$v,   )
 ))
-$(call _helpDeps,$(minion_alias))
+$(call _helpDeps,$(minionDetectAlias))
 
-It generates the following rule: $(call _qvn,$(call get,rule,$(minion_alias)))
+It generates the following rule: $(call _qvn,$(call get,rule,$(minionDetectAlias)))
 endef
 
 # $1 = C(A).P; $2 = description;  $(id) = C(A); $p = P
@@ -533,9 +533,9 @@ Alias(clean).command ?= $(if $(call _safeToClean,$(VOUTDIR)),rm -rf $(VOUTDIR),@
 
 Alias(graph).in ?= Graph(Alias(default))
 
-# This will be the default target when `$(minion_end)` is omitted (and
+# This will be the default target when `$(minionEnd)` is omitted (and
 # no goal is named on the command line)
-_error_default: ; $(error Makefile used minion_start but did not call `$$(minion_end)`)
+_error_default: ; $(error Makefile used minionStart but did not call `$$(minionEnd)`)
 
 .SUFFIXES:
 $(_forceTarget):
@@ -565,7 +565,7 @@ define _epilogue
     # Trivial goals do not benefit from a cache.  Importantly, avoid the
     # cache when handling `help` (targets may conflict with cache file) or
     # `clean` (so we can recover from a corrupted cache file).
-  else ifdef minion_cache
+  else ifdef minionCache
     $(call _eval,eval-cache,$(value _cacheRule))
     # If the cache makefile does NOT exist yet then _cachedIDs is unset and
     # will be set to "%" here to disable _evalRules, because Make will
@@ -585,7 +585,7 @@ _error = $(error $1)
 _isInstance = $(filter %$],$1)
 _isIndirect = $(findstring @,$(filter-out %$],$1))
 _aliasID = $(if $(filter s% r%,$(flavor Alias($1).in) $(flavor Alias($1).command)),Alias($1))
-_goalID = $(or $(call minion_alias,$1),$(if $(or $(_isInstance),$(_isIndirect)),_Goal($1)))
+_goalID = $(or $(call minionDetectAlias,$1),$(if $(or $(_isInstance),$(_isIndirect)),_Goal($1)))
 _ivar = $(filter-out %@,$(subst @,@ ,$1))
 _ipat = $(if $(filter @%,$1),%,$(subst $(\s),,$(filter %( %% ),$(subst @,$[ ,$1) % $(subst @, $] ,$1))))
 _EI = $(call _error,$(if $(filter %@,$1),Invalid target (ends in '@'): $1,Indirection '$1' references undefined variable '$(_ivar)')$(if $(and $(_self),$2),$(\n)Found while expanding $(if $(filter _Goal$[%,$(_self)),command line goal $(patsubst _Goal(%),%,$(_self)),$(_self).$2)))
@@ -643,8 +643,8 @@ _outBX = $(subst @D,/,$(subst $(\s),,$(patsubst /%@_,_%@,$(addprefix /,$(subst @
 _outBS = $(_fsenc)$(if $(findstring %,$3),,$(suffix $4))$(if $4,$(patsubst _/$(OUTDIR)%,_%,$(if $(filter %$],$2),_)$(subst //,/_root_/,$(subst //,/,$(subst /../,/_../,$(subst /./,/_./,$(subst /_,/__,$(subst /,//,/$4))))))),$(call _outBX,$2))
 _outBasis = $(if $(filter $5,$2),$(_outBS),$(call _outBS,$1$(subst _$(or $5,|),_|,_$2),$(or $5,out),$3,$4))
 
-ifndef minion_start
+ifndef minionStart
   $(eval $(value _epilogue))
 else
-  minion_end = $(eval $(value _epilogue))
+  minionEnd = $(eval $(value _epilogue))
 endif

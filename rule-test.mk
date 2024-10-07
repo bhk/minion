@@ -18,25 +18,25 @@ Alias(default).in = Alias(cache-test) Alias(graph-test)
 
 # `cached-rules` is invoked in a sub-make.  Some instances are cached
 # and some are not, and an environment variable can modiy their behavior.
-Alias(cached-rules).in = $(minion_cache)
-minion_cache_exclude = Echo(xx)
+Alias(cached-rules).in = $(minionCache)
+minionNoCache = Echo(xx)
 
 Echo.inherit = Builder
 Echo.rule = .PHONY: {@}$(\n){inherit}
 Echo.in = $(patsubst %,Echo(%),$(patsubst x%,%,$(_arg1)))
 Echo.command = @echo $(TEXT) > {@}
 
-# ASSERT: indirect dependencies of $(minion_cache) are cached
-# ASSERT: individual instance is excluded via $(minion_cache_exclude)
+# ASSERT: indirect dependencies of $(minionCache) are cached
+# ASSERT: individual instance is excluded via $(minionNoCache)
 define Alias(cache-test).command
   @echo '#*> cache-test'
   @rm -rf $(OUTDIR)
   @mkdir -p $(OUTDIR)
-  TEXT=a $(makeSelf) cached-rules 'minion_cache=Echo(xxx)'
+  TEXT=a $(makeSelf) cached-rules 'minionCache=Echo(xxx)'
   grep -q a $(call get,out,Echo(x))
   grep -q a $(call get,out,Echo(xx))
   grep -q a $(call get,out,Echo(xxx))
-  TEXT=B $(makeSelf) cached-rules 'minion_cache=Echo(xxx)'
+  TEXT=B $(makeSelf) cached-rules 'minionCache=Echo(xxx)'
   grep -q a $(call get,out,Echo(x))   # cached
   grep -q B $(call get,out,Echo(xx))  # not cached
   grep -q a $(call get,out,Echo(xxx)) # cached
@@ -85,9 +85,9 @@ define Alias(speed-test).command
   @echo '#*> graph-test'
   @mkdir -p $(OUTDIR)
   @rm -rf $(OUTDIR)cache.mk
-  time $(makeSelf) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=1'
+  time $(makeSelf) nada 'minionCache=Alias(mongo)' '_cacheGroupSize=1'
   @rm -rf $(OUTDIR)cache.mk
-  time $(makeSelf) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=10'
+  time $(makeSelf) nada 'minionCache=Alias(mongo)' '_cacheGroupSize=10'
 endef
 
 

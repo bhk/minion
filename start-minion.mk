@@ -3,5 +3,5 @@
 # $(end), the Makefile may make use of exported functions, and may override
 # variables (e.g. class properties) defined by Minion.
 
-minion_start = 1
+minionStart = 1
 include $(dir $(lastword $(MAKEFILE_LIST)))minion.mk

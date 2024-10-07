@@ -1,25 +1,14 @@
 Minion TODOs:
- - consistent naming conventions:
-    minion_start           -->  minionStart
-    minion_end             -->  minionEnd
-    minion_cache           -->  minionCache
-    minion_cache_exclude   -->  minionCacheExclude
-    minion_alias           -->  minionDetectAlias
  - trap $@, $^, and $<
  - Exec/Run/Test & inferClasses...  makes no sense for any but first input
  - "foo_bar" => "bar" under "foo";   "foo-bar" = name "foo bar"
  - @<wildcard>
  - When overriding {outDir}, .dep files land in same place, but .vv land in original...
  - C(A).inherit = ... ?
- - _eq, _not, _reverse
+ - _not, _reverse
  - _eval/_log : swap $1 & $2 ... default $2
  - _uniq
  - Detect simple .foo = ... {foo} ... infinite loop
- - Migrate changes to minion project:
-   - LinkC -> Exe
-   - Run/Exec/Test & Phony
-   - .args -> execArgs
-   - Builder.exportPrefix
  - make clean INSTANCE
      {cleanCommand} property, if given, specifies how to clean (for
      phony targets like Build)
@@ -61,7 +50,7 @@ Minion TODOs:
  - Clarify: {in, oo, deps} are inputs; override xxIDs;  "up" is for class
  - Version stamp
  - cache validity option and $(call _wildcard,...) ???
- - minion_cache_validity = $(wildcard ...),$(LUA)
+ - minionCacheValidity = $(wildcard ...),$(LUA)
    Piggyback on `vv` feature in makefile generation rule
    or...
       _wildcard = $(call _envCall,wildcard,$1)
@@ -95,20 +84,29 @@ Minion TODOs:
 Changes from main:
 
  - remove Shell, Makefile, Include
+ - remove Mkdir, Touch, Remove, Zip, Unzip, Tar (now in "samples.mk")
  - add Test
- - move Mkdir, Touch, Remove, Zip, Unzip, Tar to "samples.mk"
- - rename:
-     Gzip      -> GZip
-     _escArg   -> _escape
- - LinkC, LinkC++  -->  CExe, CExe++
- - Compile  -->  CCBase
+ - rename...
+                     Gzip  ->  GZip
+                    LinkC  ->  CExe
+                  LinkC++  ->  CExe++
+                  Compile  ->  CCBase
+                  _escArg  ->  _escape
+             minion_start  ->  minionStart
+               minion_end  ->  minionEnd
+             minion_cache  ->  minionCache
+     minion_cache_exclude  ->  minionNoCache
+             minion_alias  ->  minionDetectAlias
+             minion_debug  ->  minionDebug
+                Exec.args  ->  Exec.execArgs
+
  - CCBase:  flags -> options,  refactor of {options}
+ - Added Builder.{recipe}
  - make clean V='x' cleans VOUTDIR, not OUTDIR
  - Removed this: (takes ~18ms, saves about 0?)
      # Disable Make's built-in implicit pattern rules (they can slow things down)
      @echo 'a:' | $(MAKE) -pf - | sed '/^[^: ]*%[^: ]*\::* /!d' >> {@}_tmp_
  - Optimize cache generation (multiple rules per printf command)
- - Added Builder.{recipe}
  - `help C(A)`  ->  show {rule} if {command} is not defined
 
 # 3200 create cache (N=1)

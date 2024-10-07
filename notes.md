@@ -59,7 +59,7 @@ Problems:
 
  * Assigning instance properties
 
-     define minion_defs
+     define minionDefs
        C("hello world.c").flags = ...
        ...
      endef
@@ -177,7 +177,7 @@ name within `rule` (in the Make rule, .PHONY)
  * Allow instances to easily select "lazy" recipes, so that their command
    will be evaluated only if the target is stale. However, this provides no
    savings when vv includes {command}.  The only *actual* case right now is
-   Makefile[minion_cache], which does this on its own.  And Makefile would
+   Makefile[minionCache], which does this on its own.  And Makefile would
    need a way to convert lazy rules into non-lazy:
 
       ;; assumes no '$@' or other rule-processing-phase-only vars

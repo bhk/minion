@@ -126,7 +126,7 @@
 (export (native-name _aliasID) 1)
 
 ;; Not exported; this definition resides in minion.mk because it uses "?=".
-(define (minion_alias goal)
+(define (minionDetectAlias goal)
   &native
   (_aliasID goal))
 
@@ -137,7 +137,7 @@
 ;;
 (define (_goalID name)
   &native
-  (or (minion_alias name)
+  (or (minionDetectAlias name)
       (if (or (_isInstance name)
               (_isIndirect name))
           (.. "_Goal(" name ")"))))

@@ -11,10 +11,10 @@
 (require "outputs.scm")
 
 (define `tail "
-ifndef minion_start
+ifndef minionStart
   $(eval $(value _epilogue))
 else
-  minion_end = $(eval $(value _epilogue))
+  minionEnd = $(eval $(value _epilogue))
 endif
 ")
 

@@ -186,12 +186,12 @@ build steps, this can take a perceptible amount of time.  To accelerate
 incremental builds, Minion can write many or all of its generated rules to a
 "cache" file, and avoid re-computing them every time `make` is invoked.
 
-To enable caching, assign to the variable `minion_cache` an [ingredient
+To enable caching, assign to the variable `minionCache` an [ingredient
 list](#ingredients) that identifies the instances to be cached.  All of the
 rules of the referenced instances and their transitive dependencies will be
 written to a cache file.
 
-When using `minion_cache`, you can still build either cached or uncached
+When using `minionCache`, you can still build either cached or uncached
 goals.  Minion will use cached rules when they are present, and dynamically
 generate any other required rules.
 
@@ -204,27 +204,27 @@ may differ from what those values are when you invoke make.
 
 One such scenario occurs when you override variables on the Make command
 line in order to perform a one-off customized build.  When doing so, you can
-also set `minion_cache` to the empty string to perform that build without
+also set `minionCache` to the empty string to perform that build without
 caching, avoiding any problems with stale cached rules.  For example:
 
-    $ make CC.optFlags=-Ot minion_cache=
+    $ make CC.optFlags=-Ot minionCache=
 
 Another such scenario occurs when you have instances whose commands or
 inputs may vary according to information pulled from the system via, for
 example, `$(wildcard ...)` or `$(shell ...)`.  When this is the case, you
-can list those specific instances in the variable `minion_cache_exclude`, so
+can list those specific instances in the variable `minionNoCache`, so
 that their rules will be excluded from the cache file and instead be
 generated each time you invoke make.  For example:
 
     ...
-    minion_cache = Alias(default)
-    minion_cache_exclude = LinkC(@prog)
+    minionCache = Alias(default)
+    minionNoCache = LinkC(@prog)
     ...
     prog = $(wildcard *.c)
     ...
 
-Note that whereas `minion_cache` implicitly includes all transitive
-dependencies of the listed instances, `minion_cache_exclude` does not.  It
+Note that whereas `minionCache` implicitly includes all transitive
+dependencies of the listed instances, `minionNoCache` does not.  It
 is intended to target individual build steps.
 
 
@@ -503,11 +503,12 @@ the following "unprefixed" names:
     V, OUTDIR, VOUTDIR            Control of build output
     ., get                        Core object system functions
     \s \t \n \e \H ; [ ] [[ ]]    Character constants
-    minion_start
-    minion_end
-    minion_cache
-    minion_cache_exclude
-    minion_alias
+    minionStart
+    minionEnd
+    minionDebug
+    minionCache
+    minionNoCache
+    minionDetectAlias
 
 We generally avoid single-letter global variables so that they can be used
 as "local" variables (in Make `foreach` expressions).  Underscore ("_")
