@@ -8,7 +8,9 @@ MINION ?= minion.mk
 # Don't interfere with other make invocations
 OUTDIR = .out/cachetest/
 
-Alias(default).in = Alias(cache-test)
+makeSelf = $(MAKE) -f $(thisFile)
+
+Alias(default).in = Alias(cache-test) Alias(graph-test)
 
 #----------------------------------------------------------------
 # cache-test
@@ -24,21 +26,42 @@ Echo.rule = .PHONY: {@}$(\n){inherit}
 Echo.in = $(patsubst %,Echo(%),$(patsubst x%,%,$(_arg1)))
 Echo.command = @echo $(TEXT) > {@}
 
-MKC = make -f $(thisFile) cached-rules
-
 # ASSERT: indirect dependencies of $(minion_cache) are cached
 # ASSERT: individual instance is excluded via $(minion_cache_exclude)
 define Alias(cache-test).command
+  @echo '#*> cache-test'
   @rm -rf $(OUTDIR)
   @mkdir -p $(OUTDIR)
-  TEXT=a $(MKC) 'minion_cache=Echo(xxx)'
+  TEXT=a $(makeSelf) cached-rules 'minion_cache=Echo(xxx)'
   grep -q a $(call get,out,Echo(x))
   grep -q a $(call get,out,Echo(xx))
   grep -q a $(call get,out,Echo(xxx))
-  TEXT=B $(MKC) 'minion_cache=Echo(xxx)'
+  TEXT=B $(makeSelf) cached-rules 'minion_cache=Echo(xxx)'
   grep -q a $(call get,out,Echo(x))   # cached
   grep -q B $(call get,out,Echo(xx))  # not cached
   grep -q a $(call get,out,Echo(xxx)) # cached
+endef
+
+#----------------------------------------------------------------
+# Graph test
+#----------------------------------------------------------------
+
+Alias(graph-test).in = Write(expected-graph)
+define Alias(graph-test).command
+  @echo '#*> graph-test'
+  $(makeSelf) 'Graph(Echo(xxx))' > {@}.out
+  diff -u $(call get,out,Write(expected-graph)) {@}.out
+endef
+
+define expected-graph
+
+Echo(xxx)
+|  
++-> Echo(xx)
+    |  
+    +-> Echo(x)
+
+
 endef
 
 #----------------------------------------------------------------
@@ -59,19 +82,13 @@ Alias(nada).in = Phony(nothing)
 Phony(nothing).in =
 
 define Alias(speed-test).command
+  @echo '#*> graph-test'
   @mkdir -p $(OUTDIR)
   @rm -rf $(OUTDIR)cache.mk
-  time make -f $(thisFile) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=1'
+  time $(makeSelf) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=1'
   @rm -rf $(OUTDIR)cache.mk
-  time make -f $(thisFile) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=10'
+  time $(makeSelf) nada 'minion_cache=Alias(mongo)' '_cacheGroupSize=10'
 endef
 
 
 include $(MINION)
-
-# 3200 create cache (N=1)
-#  950 create cache (N=12)
-#  800 create cache (N=50)
-#  600 $(call _evalRules,Alias(mongo))
-#  340 $(call _rollup,Alias(mongo))
-#   57 make nada (built cache)

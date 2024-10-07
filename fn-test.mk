@@ -317,5 +317,3 @@ endef
 $(call _expectEQ,\
   $(call get,rule,Write(WVAR)),\
   $(value WWrule))
-
-$(info $(MINION) ok)

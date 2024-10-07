@@ -85,18 +85,29 @@ echo foo
 echo baz
 endef
 
-test-lazy:
+lazy-test:
 	$(lazyRecipe)
 
-test-lazy2: ; $(lazyRecipe)
+lazy2-test: ; $(lazyRecipe)
 
 
 #
-# Characters in variables
+# Odd variable names
+#
+#  * We can define and use @ prior to rule processing phase, but during rule
+#    processing phase it will use Make's automatic definition.
 #
 
 a<b = AltB
 a>b = AgtB
 
-test-char: ; echo $(a<b) $(a>b)
+@ = MYDEF
+PRE@ := $@
+ifneq "$@" "MYDEF"
+  $(error Cannot override "@" prior in expansion phase)
+endif
+
+var-test:
+	echo $(a<b) $(a>b)
+	echo '@ was "$(PRE@)" and now is "$@"'
 

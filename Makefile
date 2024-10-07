@@ -5,7 +5,7 @@
 
 MO = .out/minion.mk
 TO = .out/minion.mk.ok
-EO = .out/demo.md
+DO = .out/demo.md
 
 .PHONY: default minion demo clean test time scam promote
 
@@ -14,7 +14,7 @@ diff-cmd = @diff -q $1 || (diff -u $(if $(use-color),--color=always) $1 ; false)
 
 default: minion demo
 minion: $(MO) $(TO) ; $(call diff-cmd,minion.mk $(MO))
-demo: minion $(EO) ; $(call diff-cmd,demo.md $(EO))
+demo: minion $(DO) ; $(call diff-cmd,demo.md $(DO))
 clean: ; rm -rf .out
 test: $(TO)
 time: ; time make -R -f time.mk
@@ -33,19 +33,22 @@ promote-cmd = @\
 
 
 $(MO): *.scm minion.mk Makefile
-	mkdir -p $(@D)
+	@echo '#*> MO: Minion output'
+	@mkdir -p $(@D)
 	sed '1,/SCAM/!d' minion.mk > $@.1
 	scam minion.scm $@.2
 	cat $@.1 $@.2 > $@
 
 $(TO): $(MO) fn-test.mk rule-test.mk
-	mkdir -p $(@D)
+	@echo '#*> TO: Test Output'
+	@mkdir -p $(@D)
 	make -f fn-test.mk MINION=$<
 	( make -f rule-test.mk MINION=$< ) > $@.log || ( cat $@.log ; false )
 	touch $@
 
-$(EO): minion.mk demo/*
-	mkdir -p $(@D)
-	rm -rf demo/.out
+$(DO): minion.mk demo/*
+	@echo '#*> DO: Demo Output'
+	@mkdir -p $(@D)
+	@rm -rf demo/.out
 	cd demo && MAKEFLAGS= scam run-session.scm demo-session.md -- -o ../$@
 	rm demo/Makefile

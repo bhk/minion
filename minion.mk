@@ -16,6 +16,7 @@ CExe.inherit ?= _CExe
 CCBase.inherit ?= _CCBase
 Copy.inherit ?= _Copy
 Exec.inherit ?= _Exec
+Graph.inherit ?= _Graph
 GZip.inherit ?= _GZip
 Link.inherit ?= _Link
 Phony.inherit ?= _Phony
@@ -238,17 +239,16 @@ _Write.in =
 
 # Graph(INSTANCES) : Draw a graph of dependencies of instances
 #
-# Set Graph_FILES=1          to include explicit files (but not implicit deps)
-# Set Graph_IGNORE=CLASSES   to omit certain classes
-#
-Graph.inherit = Phony
-Graph.in =
-Graph.inExp = $(call Graph_filter,$(call _expand,$(_args)))
-Graph.rule = {@}: ; @true $$(info $$(call _graph,Graph_get-,$$(call _graphTrav,Graph_get-children,$(call _escape,{inExp}))))
+_Graph.inherit = Phony
+_Graph.in =
+_Graph.inExp = $(call _Graph_filter,{prune},$(call _expand,$(_args)))
+_Graph.rule = {@}: ; @true $$(info $$(call get,text,$(call _escape,$(_self))))
+_Graph.text = $(call _graphDeps,_Graph_getNeeds,_Graph_getName,{prune},{inExp})
+_Graph.prune = $(_Graph_IGNORE)
 
-Graph_filter = $(filter-out $(patsubst %,%$[%,$(Graph_IGNORE)),$(filter $(if $(Graph_FILES),%,%$]),$1))
-Graph_get-children = $(call Graph_filter,$(call get,needs,$1))
-Graph_get-name = $(patsubst Package(%),%,$(patsubst Alias(%),%,$1))
+_Graph_filter = $(filter-out $1,$(filter %$],$2))
+_Graph_getNeeds = $(call _Graph_filter,$1,$(call get,needs,$2))
+_Graph_getName = $(patsubst Package(%),%,$(patsubst Alias(%),%,$2))
 
 
 # Builder(ARGS):  Base class for builders.  See minion.md for details.
@@ -632,8 +632,9 @@ _rollupEx = $(if $1,$(call _rollupEx,$(filter-out $3 $1,$(sort $(filter %$],$(ca
 _relpath = $(if $(filter /%,$2),$2,$(if $(filter ..,$(subst /, ,$1)),$(error _relpath: '..' in $1),$(or $(foreach w,$(filter %/%,$(word 1,$(subst /,/% ,$1))),$(call _relpath,$(patsubst $w,%,$1),$(if $(filter $w,$2),$(patsubst $w,%,$2),../$2))),$2)))
 _group = $(if $1,$(subst | ,|0,$(subst ||,,$(join $(subst |,|1,$1),$(subst $(patsubst %,|,$(wordlist 1,$2,$1)),$(patsubst %,|,$(wordlist 1,$2,$1))|,$(patsubst %,|,$1))) )))
 _ungroup = $(subst |1,|,$(subst |0, ,$1))
-_graph = $(if $2,$(call _graph,$1,$(wordlist 2,9999,$2),$(subst ``,` ,$(filter-out %9,$(subst `  ,``,$(patsubst `,` ,$(subst `$(word 1,$2)`,`,$3) `$(subst $(\s),,$(addsuffix `,$(call $1children,$(word 1,$2)))) 9)))),$4$(foreach w,$3,$(if $(filter `,$w), ,|)  )$(\n)$(foreach w,$3,$(if $(findstring `$(word 1,$2)`,$w),+->,$(if $(filter `,$w), ,|)  ))$(if $3, )$(call $1name,$(word 1,$2))$(\n)),$4)
-_graphTrav = $(if $(word 1,$2),$(call _graphTrav,$1,$(call $1,$(word 1,$2)) $(wordlist 2,9999,$2),$(filter-out $(word 1,$2),$3) $(word 1,$2)),$3)
+_graph = $(if $4,$(call _graph,$1,$2,$3,$(wordlist 2,9999,$4),$(subst ``,` ,$(filter-out %9,$(subst `  ,``,$(patsubst `,` ,$(subst `$(word 1,$4)`,`,$5) `$(subst $(\s),,$(addsuffix `,$(call $1,$3,$(word 1,$4)))) 9)))),$6$(foreach w,$5,$(if $(filter `,$w), ,|)  )$(\n)$(foreach w,$5,$(if $(findstring `$(word 1,$4)`,$w),+->,$(if $(filter `,$w), ,|)  ))$(if $5, )$(call $2,$3,$(word 1,$4))$(\n)),$6)
+_traverse = $(if $(word 1,$3),$(call _traverse,$1,$2,$(call $1,$2,$(word 1,$3)) $(wordlist 2,9999,$3),$(filter-out $(word 1,$3),$4) $(word 1,$3)),$4)
+_graphDeps = $(call _graph,$1,$2,$3,$(call _traverse,$1,$3,$4))
 
 # outputs.scm
 

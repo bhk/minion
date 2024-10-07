@@ -490,6 +490,33 @@ of some other given instance.
 
 ## Exported Definitions
 
+### Naming Conventions
+
+Camel case is generally used for naming in Minion and recommended for user
+makefiles.  Function, variable, and property names begin lowercase, while
+class names begin uppercase.  All-caps names might conflict with environment
+variables or Make's built-in variable settings (e.g LINK.c, COMPILE.c,
+etc.).  Variables defined by by minion.mk begin with "minion" or "_" to avoid
+unintentional conflicts with user makefiles, except for built-in classes and
+the following "unprefixed" names:
+
+    V, OUTDIR, VOUTDIR            Control of build output
+    ., get                        Core object system functions
+    \s \t \n \e \H ; [ ] [[ ]]    Character constants
+    minion_start
+    minion_end
+    minion_cache
+    minion_cache_exclude
+    minion_alias
+
+We generally avoid single-letter global variables so that they can be used
+as "local" variables (in Make `foreach` expressions).  Underscore ("_")
+may be used as a namespace delimiter for variables that are associated with
+a class but not property definitions.
+
+
+### Supported Functions
+
 Minion defines a number of variables and functions for use by user Makefiles
 within [recursive](#simple-and-recursive-variables) property definitions.
 
@@ -498,12 +525,13 @@ within [recursive](#simple-and-recursive-variables) property definitions.
   - `$(\n)`: newline
   - `$(\t)`: tab
   - `$(\s)`: space
+  - `$(\e)`: escape
+  - `$(\H)`: `#`
   - `$;` : `,`
   - `$[` : `(`
   - `$]` : `)`
   - `$([[)`: `{`
   - `$(]])`: `}`
-  - `$(\H)`: `#`
 
 * `$(call get,PROP,IDS)`
 
@@ -532,7 +560,7 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
 * `$(call _printfEsc,STR)`
 
-  Escape STR for inclusion in a `printf` format string on a command line.
+  Escape STR for inclusion in a `printf` command line argument.
 
 * `$(call _printf,STR)`
 

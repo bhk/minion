@@ -1,5 +1,11 @@
 Minion TODOs:
  - consistent naming conventions:
+    minion_start           -->  minionStart
+    minion_end             -->  minionEnd
+    minion_cache           -->  minionCache
+    minion_cache_exclude   -->  minionCacheExclude
+    minion_alias           -->  minionDetectAlias
+ - trap $@, $^, and $<
  - Exec/Run/Test & inferClasses...  makes no sense for any but first input
  - "foo_bar" => "bar" under "foo";   "foo-bar" = name "foo bar"
  - @<wildcard>
@@ -91,7 +97,9 @@ Changes from main:
  - remove Shell, Makefile, Include
  - add Test
  - move Mkdir, Touch, Remove, Zip, Unzip, Tar to "samples.mk"
- - rename Gzip -> GZip
+ - rename:
+     Gzip      -> GZip
+     _escArg   -> _escape
  - LinkC, LinkC++  -->  CExe, CExe++
  - Compile  -->  CCBase
  - CCBase:  flags -> options,  refactor of {options}
@@ -103,40 +111,9 @@ Changes from main:
  - Added Builder.{recipe}
  - `help C(A)`  ->  show {rule} if {command} is not defined
 
-
-Naming
-------
-
-Camel case is generally used for naming in Minion and recommended for user
-makefiles.  Function, variable, and property names begin lowercase, while
-class names begin uppercase.  All-caps names might conflict with environment
-variables or Make's built-in variable settings (e.g LINK.c, COMPILE.c,
-etc.).
-
-We avoid single-letter global variables -- except notably for V -- so that
-they can be used as "local" variables (in Make `foreach` expressions).
-
-Underscore ("_") may be used as a namespace delimiter for variables that are
-associated with a class but not property definitions.
-
-Variables defined by minion.mk begin with "minion" or "_" to avoid
-unintentional conflicts with user makefiles.  Exceptions to this rule are
-
-the `Class.inherit` variables for built-in classes and the following
-"unprefixed" names:
-
-  V
-  OUTDIR
-  VOUTDIR
-  minion_start           -->  minionStart
-  minion_end             -->  minionEnd
-  minion_cache           -->  minionCache
-  minion_cache_exclude   -->  minionCacheExclude
-  minion_alias           -->  minionDetectAlias
-  \s \t \n \e \H [[ ]] [ ] ;  (character constants)
-
-But....
-  Graph_get-children
-  Graph_get-name
-  Graph_IGNORE
-  Graph_FILES
+# 3200 create cache (N=1)
+#  950 create cache (N=12)
+#  800 create cache (N=50)
+#  600 $(call _evalRules,Alias(mongo))
+#  340 $(call _rollup,Alias(mongo))
+#   57 make nada (built cache)

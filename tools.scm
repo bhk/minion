@@ -9,10 +9,10 @@
 
 (export-text "# tools.scm")
 
+
 ;;----------------------------------------------------------------
 ;; _inferPairs
 ;;----------------------------------------------------------------
-
 
 (define `(pair id file)
   (.. id "$" file))
@@ -35,7 +35,6 @@
 
 (expect "a.c" (_pairFiles "a.c"))
 (expect "a.o" (_pairFiles "C(a.c)$a.o"))
-
 
 
 ;; Infer intermediate instances given a set of input IDs and their
@@ -72,6 +71,10 @@
 (expect (_inferPairs "a.x a.o IC(a.c)$out/a.o" "IP.o")
         "a.x IP(a.o)$out/P/a IP(IC(a.c))$out/IP_IC/a")
 
+
+;;----------------------------------------------------------------
+;; _depsOf, _rollup, _rollupEx
+;;----------------------------------------------------------------
 
 ;; Return transitive dependencies of ID, excluding non-instances.  Memoize
 ;; results so this can be applied efficiently to many IDs in arbitrary
@@ -124,36 +127,38 @@
 
 (export (native-name _rollupEx) nil)
 
+;; Test _depsOf, _rollup, _rollupEx
+(set-native "R(a).needs" "R(b) R(c) x y z")
+(set-native "R(b).needs" "R(c) R(d) x y z")
+(set-native "R(c).needs" "R(d)")
+(set-native "R(d).needs" "R(e)")
+(set-native "R(e).needs" "")
 
-(begin
-  ;; Test _depsOf, _rollup, _rollupEx
-  (set-native "R(a).needs" "R(b) R(c) x y z")
-  (set-native "R(b).needs" "R(c) R(d) x y z")
-  (set-native "R(c).needs" "R(d)")
-  (set-native "R(d).needs" "R(e)")
-  (set-native "R(e).needs" "")
+(expect (_depsOf "R(a)")
+        "R(b) R(c) R(d) R(e)")
 
-  (expect (_depsOf "R(a)")
-          "R(b) R(c) R(d) R(e)")
+(expect (_rollup "R(a)")
+        "R(a) R(b) R(c) R(d) R(e)")
 
-  (expect (_rollup "R(a)")
-          "R(a) R(b) R(c) R(d) R(e)")
+(expect (strip (_rollupEx "R(a)" ""))
+        "R(a) R(b) R(c) R(d) R(e)")
 
-  (expect (strip (_rollupEx "R(a)" ""))
-          "R(a) R(b) R(c) R(d) R(e)")
+(expect (strip (_rollupEx "R(a)" "R(d)"))
+        "R(a) R(b) R(c)")
 
-  (expect (strip (_rollupEx "R(a)" "R(d)"))
-          "R(a) R(b) R(c)")
+(set-native "_R(d)_needs" "R(x)")
+(set-native "R(x).needs" "")
 
-  (set-native "_R(d)_needs" "R(x)")
-  (set-native "R(x).needs" "")
-
-  (expect (strip (_rollupEx "R(a)" "R(d)"))
-          "R(a) R(b) R(c) R(x)")
-  nil)
+(expect (strip (_rollupEx "R(a)" "R(d)"))
+        "R(a) R(b) R(c) R(x)")
 
 
+;;----------------------------------------------------------------
+;; _relpath
+;;----------------------------------------------------------------
 
+;; Generate a relative path from FROM to TO
+;;
 (define (_relpath from to)
   &native
   (if (filter "/%" to)
@@ -167,7 +172,6 @@
                               (.. "../" to))))
               to))))
 
-
 (export (native-name _relpath) nil)
 
 (expect (_relpath "a/b/c" "/x") "/x")
@@ -179,11 +183,9 @@
 
 
 ;;----------------------------------------------------------------
-;; Group LIST into sub-lists of length N.
+;; _group & _ungroup
 ;;----------------------------------------------------------------
 
-;; Usage: (foreach (g (_group list)) ... (_ungroup g) ...)
-;;
 (declare (_group list n) &native)
 (declare (_ungroup grp) &native)
 
@@ -194,6 +196,8 @@
   (define `D1 (.. D 1))  ;; encodes D
   (define `D_ (.. D " "))
 
+  ;; Group LIST into sub-lists of length N.
+  ;;
   (define (_group list n)
     &native
     (define `dgroup (patsubst "%" D (wordlist 1 n list)))
@@ -205,6 +209,8 @@
                D_ D0    ;; collapse all other word boundaries
                (.. (join (subst D D1 list) markers) " "))))
 
+  ;; Expand group(s) to an ordinary word list.
+  ;;
   (define (_ungroup groups)
     &native
     (subst D0 " "
@@ -231,14 +237,14 @@
 
 
 ;;----------------------------------------------------------------
-;; Construct a graph of dependencies between instances.
+;; _graphDeps, _graph, _traverse
 ;;----------------------------------------------------------------
 
-(declare (_graph fn-prefix nodes ?slots ?out) &native)
-(declare (_graphTrav get-children-fn nodes ?seen) &native)
+(declare (_graph fn-ch fn-names cxt nodes ?slots ?out) &native)
+(declare (_traverse children-fn children-cxt nodes ?seen) &native)
+(declare (_graphDeps children-fn name-fn cxt nodes) &native)
 
 (begin
-
   ;; This delimiter must not appear anywhere in node names
   (define `D "`")
   (define `DD (.. D D))
@@ -251,12 +257,10 @@
   (define `(stick slot)
     (.. (if (filter D slot) " " "|") "  "))
 
-
   (define `(arrow slot node)
     (if (findstring (.. D node D) slot)
         "+->"
         (stick slot)))
-
 
   ;; Remove empty slots from the *end* of SLOTS
   ;;
@@ -288,9 +292,8 @@
 
   ;; Return textual representation of all dependencies among NODES
   ;;
-  ;; FN-PREFIX us used to construct two function names
-  ;;    FN-PREFIXchildren = function: node -> children
-  ;;    FN-PREFIXname = function: node -> name
+  ;; (CH-FN CXT node) -> children of node
+  ;; (NAME-FN CXT node) -> text to be displayed for node
   ;; NODES = nodes remaining to be drawn (two lines of text per node).
   ;;         This must be partially ordered (parents precede children).
   ;; SLOTS = columns representing parents.
@@ -303,12 +306,11 @@
   ;;     delete trailing empty slots
   ;;   update NODE to (rest NODES)
   ;;
-  (define (_graph fn-prefix nodes ?slots ?out)
+  (define (_graph ch-fn name-fn cxt nodes ?slots ?out)
     &native
-    (define `(get-children node) (native-call (.. fn-prefix "children") node))
-    (define `(get-name node) (native-call (.. fn-prefix "name") node))
-
     (define `node (word 1 nodes))
+    (define `children (native-call ch-fn cxt node))
+    (define `name (native-call name-fn cxt node))
 
     ;; Add new slot containing children of NODE, and remove NODE
     ;; from other slots.
@@ -316,7 +318,7 @@
       (trim-empties
        (._. (subst (.. D node D) D slots)
             ;; convert list of children to slot format
-            (.. D (subst " " "" (addsuffix D (get-children node)))))))
+            (.. D (subst " " "" (addsuffix D children))))))
 
     (define `newOut
       (.. out
@@ -326,38 +328,32 @@
           (foreach (slot slots)
             (arrow slot node))
           (if slots " ")
-          (get-name node) "\n"))
+          name "\n"))
 
     (if nodes
         ;; Output lines for this node.
-        (_graph fn-prefix (rest nodes) newSlots newOut)
+        (_graph ch-fn name-fn cxt (rest nodes) newSlots newOut)
         out))
 
+  (define `test-graph
+    { 0: [1 2 4],
+      1: [3],
+      2: [3],
+      A: "D C B",
+      B: "C E",
+      C: "D",
+      })
 
-  ;; test _graph
+  (define (test-children G node)
+    (dict-get node G))
 
-  (define (sample-children node)
-    &native
-    (define `g
-      { 0: [1 2 4],
-        1: [3],
-        2: [3],
-        A: "D C B",
-        B: "C E",
-        C: "D",
-        })
-
-    (dict-get node g))
-
-  (define (sample-name node)
-    &native
+  (define (test-name cxt node)
     (if (filter 3 node)
         (.. "<" node ">")
         node))
 
   (expect
-   (concat-vec [
-                ""
+   (concat-vec [""
                 "0"
                 "|  "
                 "+-> 1"
@@ -367,35 +363,42 @@
                 "|   +-> +-> <3>"
                 "|  "
                 "+-> 4"
-                ""
-                ]
+                ""]
                "\n")
-   (_graph "sample-" "0 1 2 3 4" ""))
+   (_graph (native-name test-children) (native-name test-name) test-graph
+           "0 1 2 3 4"))
 
 
   ;; Return list of descendants of NODES, ordered such that all parents
   ;; precede their children.
   ;;
-  (define (_graphTrav get-children-fn nodes ?seen)
+  (define (_traverse children-fn children-cxt nodes ?seen)
     &native
     (define `parent
       (word 1 nodes))
 
     (if parent
-        (_graphTrav get-children-fn
-              (._. (native-call get-children-fn parent) (rest nodes))
-              (._. (filter-out parent seen) parent))
+        (_traverse children-fn
+                   children-cxt
+                   (._. (native-call children-fn children-cxt parent) (rest nodes))
+                   (._. (filter-out parent seen) parent))
         seen))
 
+  (expect "A B C D E"
+          (_traverse (native-name test-children) test-graph "A"))
 
-  (expect
-   "A B C D E"
-   (_graphTrav "sample-children" "A"))
+
+  ;; Combine _graph and _traverse
+  ;;
+  (define (_graphDeps children-fn name-fn cxt nodes)
+    &native
+    (_graph children-fn name-fn cxt (_traverse children-fn cxt nodes)))
 
   ;; Display a sample graph.
-  ;; (print (_graph "sample-" (_graphTrav "sample-children" "A"))))
+  ;; (print (_graphDeps (native-name test-children) (native-name test-name) test-graph "A"))
 
   nil)
 
 (export (native-name _graph) nil)
-(export (native-name _graphTrav) nil)
+(export (native-name _traverse) nil)
+(export (native-name _graphDeps) nil)
