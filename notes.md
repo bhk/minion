@@ -39,12 +39,19 @@
 
 ### Special Characters in Instances and Indirections
 
-Consider goals on the command line, e.g. `make 'CC(a.c)'`.  Make's command
-line handling makes spaces and `=` unworkable in this scenario, and we also
-need to generate a rule with a target matching the goal.
+Consider goals on the command line.  In order to work within Make, when make
+is invoked with e.g. `make 'CC(a.c)'`, Minion will generate a rule for
+`CC(a.c)` before Make's rule processing phase.  Minion's hanlding of goals
+is therefore therefore subject to Make's handling of command line arguments
+and goals.  When Make processes command line arguments it ignores spaces and
+treats any word with `=` as a variable assignment, so arguments with `=` and
+spaces cannot be treated as goals.
 
-In a Make rule, targets cannot contain the following characters literally:
-space, `=`, `:`, `#`, and wildcards.  From probe.mak:
+When Make evaluates rules (we're not talking about goals now) it cannot
+accept targets that contain the following characters literally: space, `=`,
+`:`, `#`, and wildcards.
+
+The probe.mak test examines how targets are treated in rule syntax:
 
  * Space, `:`, `=`, and `#` can be escaped with `\`.
 
@@ -52,25 +59,25 @@ space, `=`, `:`, `#`, and wildcards.  From probe.mak:
    actual files, so the result of the glob operation will leave the target
    unchanged).
 
-Another challenge: defining instance property definitions.  This requires
-special handling for `=`, `:`, and `#` on the LHS of an assignment.
+Another challenge is the naming of Make variables, e.g. for defining Minion
+instance properties.  The following characters *can* be used on the LHS of
+an assignment but they require special encoding:
 
    : --> $(if ,,:)
    = --> $(if ,,=)
    # --> \#
 
-There are also problems with evaluating variables, which we fortunately
-sidestep.  A `$(VAR)` expression fails if `VAR` contains `:`, even if that
-`:` is the result of a sub-expression (like `$(colon)`).  Also, `$(call
-VAR,...)  will run into problems with a right parenthesis *or* colon in the
-variable name.  However, since Minion *compiles* property definitions and
-memoizes the compilation, we store the compiled version in a variable
-with a different name, avoiding the problems with `$(call ...)`.
+Even if you define such a variable, there are problems evaluating it.  A
+`$($(VARNAME))` expression fails if `$(VARNAME)` contains `:`.  Similarly,
+`$(call $(VARNAME),...)  will run into problems with a colon, and also with
+a right parenthesis!  However, since Minion *compiles* property definitions
+and memoizes the compilation, it never evaluates `$($(VARNAME))`.  Instead
+it evaluates `$(value $(VARNAME))`, and then stores the compiled version in
+a variable with an encoded name, avoiding these problems.
 
 Finally, there is the issue of computing output file names.  We encode
-certain character to ensure that output file names are shell-safe and
-make-safe, but for performance reasons we do not handle every such
-character.
+certain characters to ensure that output file names are shell-safe and
+make-safe. See output.scm.
 
 
 ### Variable Namespace Pollution

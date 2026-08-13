@@ -185,45 +185,59 @@ property for all goals and their transitive dependencies prior to Make's
 rule processing phase.  If your makefile describes hundreds or thousands of
 build steps, this can take a perceptible amount of time.  To accelerate
 incremental builds, Minion can write many or all of its generated rules to a
-"cache" file, and avoid re-computing them every time `make` is invoked.
+cache file, and avoid re-computing them every time `make` is invoked.
 
-To enable caching, define in your makefile the variable `minionCache`,
-setting it to a list of goals to be cached.  The rules of these goals and
-their transitive dependencies will be written to a cache file.
+You can enable caching by defining the variable `minionCache` in your
+makefile, setting it to a list of goals to be cached.  The rules of these
+goals and their transitive dependencies will be written to a cache file.
 
-When using `minionCache`, you can still build uncached goals.  Minion will
-use cached rules when they are present, and dynamically generate any other
-required rules.
+When using `minionCache`, you can still build uncached goals -- goals that
+are not listed in the `minionCache` word list.  Minion will use cached rules
+when they are present, and dynamically generate any other required rules.
 
-The cache file will be re-generated whenever your makefile changes, so
-generally the results of building with cached rules will be the same as when
-you build without cached rules.  Be aware that cached rules could be "stale"
-*if* the your makefile specifies isntances that depend on things other than
-the contents of makefiles.  If your rules depend on, for example, directory
-contents or environment variables, or if you invoke make with command-line
-assignments (e.g. `make CC.compiler=gcc`), then these external variables
-will not be detected.
+Any changes to your makefile will invalidate the cached makefile, so
+your normal workflow is not impaired by caching.
 
-When it comes to command-line variable assignments, they are generally
-incompatible with rule caching, but if you assign `minionCache` to an empty
-value on the same command line, it will disable caching for that invocation,
-ensuring the build results would be as you expect.
+However, there are some interactions with other features of Minion that are
+not quite polished away, so when using caching you should be aware of the
+following potential pitfalls:
 
-When your build depends on directory contents, via `$(wildcard ...)`, or
-other system state via `$(shell ...)`, your makefile can set `minionNoCache`
-to a list the affected instances, and they will be ecluded from the cache.
-For example:
+  1. When the makefile makes refence to external variables that affect rule
+     generation and differ between invocations.  This can include:
 
-    ...
-    minionCache = default
-    minionNoCache = CExe(@prog)
-    ...
-    prog = $(wildcard *.c)
-    ...
+      * Environment variables: e.g. `OUTDIR=../foo make`
+      * Make command-line variables: e.g. `make CC.compiler=gcc`.
 
-Note that whereas `minionCache` includes all transitive dependencies of the
-listed instances, `minionNoCache` does not.  It is intended to target
-individual build steps.
+  2. When the makefile's rule generation logic uses `$(wildcard ...)` or
+     `$(shell ...)` or employs wildcards in Minion indirections --
+     e.g. `CC@*.c`.
+
+In order to avoid thes problems when using caching, the following options
+are available:
+
+  * Avoid references to external variables, and to `$(wildcard ...)`,
+    `$(shell ...)`, and wildcard indirections -- e.g. `Test@*_q.c` -- in
+    your makefile.
+
+  * If you rarely invoke make with special variable bindings, inclue
+    `minionCache=` include on the command line to disable use of the cache
+    for that invocation.
+
+  * If only a few instance have such external dependencies, set the variable
+    `minionNoCache` in your makefile to a list of such instances.  These
+    will then be excluded from the cache, while still allowing caching of
+    all other instances.  For example:
+
+        ...
+        minionCache = default
+        minionNoCache = CExe(@prog)
+        ...
+        prog = $(wildcard *.c)
+        ...
+
+    Note that whereas `minionCache` will include all transitive dependencies
+    of the listed instances, `minionNoCache` does not.  It is intended to
+    target individual build steps that reference external variables.
 
 
 ## Builders
