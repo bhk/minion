@@ -1,6 +1,6 @@
 # fn_test.mk : Test make functions implemented in minion.mk
 
-Alias(default).in = #nothing
+default = #nothing
 MINION ?= minion.mk
 include $(MINION)
 
@@ -119,7 +119,7 @@ $(call _expectEQ,\
   <B(a).r:TB;<A.r:a;<B(a).s:$$(_argText);{}>>;<A.p>>)
 
 
-# _goalToID
+# _buildGoalID
 
 Alias(alias1).in = x
 Alias(alias2).command = y
@@ -127,10 +127,10 @@ Alias(alias3).in = x3
 Alias(alias3).command = y3
 
 _aliases := alias1 alias2
-$(call _expectEQ,$(call _goalToID,alias1),Alias(alias1))
-$(call _expectEQ,$(call _goalToID,@asdf),_Goal(@asdf))
-$(call _expectEQ,$(call _goalToID,as(df)),_Goal(as(df)))
-$(call _expectEQ,$(call _goalToID,asdf),)
+$(call _expectEQ,$(call _buildGoalID,alias1),Alias(alias1))
+$(call _expectEQ,$(call _buildGoalID,@asdf),_BuildGoal(@asdf))
+$(call _expectEQ,$(call _buildGoalID,as(df)),_BuildGoal(as(df)))
+$(call _expectEQ,$(call _buildGoalID,asdf),)
 
 
 # _depsOf, _rollup, _rollupEx

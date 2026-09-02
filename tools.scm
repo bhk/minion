@@ -412,3 +412,89 @@
 
 (expect (_unique "a b a c a b c c") "a b c")
 (expect (_unique "a b % ^ a b % ^") "a b % ^")
+
+
+;;----------------------------------------------------------------
+;; Rule cache generation
+;;----------------------------------------------------------------
+
+(declare (_isAlias name) &native &public)
+(declare (_isInstance name) &native &public)
+(declare (_isIndirect name) &native &public)
+
+;; Generate a `printf` command line
+(declare (_printf text) &native &public)
+
+
+;; Translate a list of goals into IDs
+(define (_goalsToIDs goals where)
+  &native
+  (_expand (foreach (g goals)
+             (or (_isGoal g)
+                 (error (.. where " contains unknown goal '" g "'"))))
+           where))
+
+
+(define (_rcr3 cacheFile cachedIDs excludedIDs groupSize)
+  &native
+  (define `tmpFile (.. cacheFile "_tmp_"))
+
+  (define `(groupText group)
+    (foreach (i (_ungroup group))
+      (.. "\n" (get "rule" i)
+          (if excludedIDs
+              (.. "\n_" i "_needs = "
+                  (filter excludedIDs (_depsOf i))))
+          "\n")))
+
+  (define `globCheck
+    (.. "\n"
+        "ifneq (" (wildcard globLog) ",$(wildcard " globLog "))\n"
+        "  " cacheFile ": $(_forceTarget)\n"
+        "endif\n"))
+
+  (.. "@mkdir -p " (dir cacheFile) "\n"
+      "@echo '_cachedIDs = " cachedIDs "' > " tmpFile "\n"
+      (foreach (g (_group cachedIDs groupSize))
+        (.. "@" (_printf (groupText g)) " >> " tmpFile "\n"))
+      (if globLog
+          (.. "@" (_printf globCheck) " >> " tmpFile "\n"))
+      "@mv " tmpFile " " cacheFile "\n"))
+
+
+(define (_rcr2 cacheFile cacheVar noCacheVar groupSize)
+  &native
+  &public
+  (define `cacheVar "minionCache")
+  (define `noCacheVar "minionNoCache")
+
+  (define `cacheExcludes
+    (filter "%)" (_goalsToIDs (native-var noCacheVar) noCacheVar)))
+
+  (define `cachedIDs
+    (filter-out cacheExcludes
+                (_rollup (_goalsToIDs (native-var cacheVar) cacheVar))))
+
+  (_rcr3 cacheFile cachedIDs cacheExcludes groupSize))
+
+
+;; Return the Make recipe (sequence of command lines) that will
+;; generate a rule cache file.
+;;
+;; This consists largely of `printf` commands.  Each printf handles a
+;; "group" of rules, because writing all rles in a single printf could
+;; command exceed line length limits, while OTOH exec'ing one printf command
+;; per rule would be slow.
+;;
+(define (_rulecacheRecipe cacheFile)
+  &native
+  (declare _cacheGroupSize &native)
+
+  (print "Updating Minion cache...")
+  (_rcr2 cacheFile "minionCache" "minionNoCache" _cacheGroupSize))
+
+
+(export (native-name _goalsToIDs) 1)
+(export (native-name _rulecacheRecipe) nil)
+(export (native-name _rcr2) nil)
+(export (native-name _rcr3) nil)

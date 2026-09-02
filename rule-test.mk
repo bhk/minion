@@ -5,12 +5,12 @@ thisFile := $(lastword $(MAKEFILE_LIST))
 # Invoke this makefile directly to test ./minion.mk
 MINION ?= minion.mk
 
-# Don't interfere with other make invocations
-OUTDIR = .out/rt/
+# Don't interfere with other tests running in parallel
+OUTDIR = .out/rule-test/
 
 makeSelf = make -f $(thisFile)
 
-Alias(default).in = Alias(cache-test) Alias(graph-test) Alias(clean-test)
+default = Alias(cache-test) Alias(graph-test) Alias(clean-test)
 
 #----------------------------------------------------------------
 # cache-test
@@ -19,7 +19,8 @@ Alias(default).in = Alias(cache-test) Alias(graph-test) Alias(clean-test)
 Echo.inherit = Builder
 Echo.rule = .PHONY: {@}$(\n){inherit}
 Echo.in = $(patsubst %,Echo(%),$(patsubst x%,%,$(filter x%,$(_arg1))))
-Echo.command = @echo $(or $(TEXT),$(_argText)) > {@}
+Echo.command = @echo $(or $(TEXT),$(_argText)) > {@} {glob}
+Echo.glob = $(and $(call _wildcard,$(_arg1)),)
 
 Alias(echox).in = Echo(x)
 
@@ -43,6 +44,7 @@ define Alias(cache-test).command
   grep -q x $(call get,out,Echo(x))   # cached
   grep -q OVR $(call get,out,Echo(xx))  # not cached
   grep -q xxx $(call get,out,Echo(xxx)) # cached
+  grep -q 'ifneq (,$$(wildcard x xxx))' $(VOUTDIR)/cache.mk
 endef
 
 #----------------------------------------------------------------
@@ -78,14 +80,14 @@ define Alias(clean-test).command
   @# ASSERT: `Clean(TARGET)` cleans {vvFile} along with {out}  (via cleanCommand)
   @mkdir -p .out
   $(makeSelf) 'Echo(xxx)' > .out/log
-  @( cd .out/rt/Echo/ && echo *) | grep 'x x.vv xx xx.vv xxx xxx.vv'
+  @( cd $(OUTDIR)Echo/ && echo *) | grep 'x x.vv xx xx.vv xxx xxx.vv'
   @$(makeSelf) 'Clean(Echo(xx))' >> .out/log
-  @( cd .out/rt/Echo/ && echo *) | grep 'xxx xxx.v'
+  @( cd $(OUTDIR)Echo/ && echo *) | grep 'xxx xxx.v'
 
   @# ASSERT: `make clean TARGET` == Clean(TARGET) and not `make clean`
   @$(makeSelf) 'Echo(xxx)' > .out/log
   @$(makeSelf) clean 'Echo(xx)' >> .out/log
-  @( cd .out/rt/Echo/ && echo *x) | grep 'xxx'
+  @( cd $(OUTDIR)Echo/ && echo *x) | grep 'xxx'
 
   @# ASSERT: `make clean` removes VOUTDIR
   @# ASSERT: `make clean` builds Alias(clean).in targets

@@ -1,10 +1,10 @@
 # time.mk: A large fictional project for timing rule generation.
 
-Alias(default).in = Work(Alias(all))
+default = Work(Alias(all))
 
-Alias(all).in = Alias(tests) Alias(progs)
-Alias(tests).in = ExecTest@LinkTest@CC@files
-Alias(progs).in = LinkC@files
+all = Alias(tests) Alias(progs)
+tests = ExecTest@LinkTest@CC@files
+progs = LinkC@files
 
 # Work[IN] : Compute rules for rollups, but do not evaluate them.
 #

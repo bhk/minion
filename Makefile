@@ -1,5 +1,5 @@
-# minion.mk and demo.md are version-controlled snapshots of build
-# products.  `make all` will build them and warn if they differ from the
+# minion.mk and demo.md are version-controlled snapshots of build products.
+# `make all` will build them and warn (fail) if they differ from the
 # corresponding files in this directory.  `make promote` will copy them from
 # ./.out to this directory.
 

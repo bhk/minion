@@ -40,7 +40,7 @@ Minion:
 ```console
 $ make 'CC(hello.c)'
 #-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -O2 -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
+gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 
 ```
 ```console
@@ -85,7 +85,7 @@ contains all generated artifacts.
 $ make clean; make 'CExe(hello.c)'
 rm -rf .out/
 #-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -O2 -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
+gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
 gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
 
@@ -98,7 +98,7 @@ a `CC` instance):
 $ make clean; make 'Run(hello.c)'
 rm -rf .out/
 #-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -O2 -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
+gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
 gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
 #-> Run(hello.c)
@@ -208,7 +208,7 @@ group:
 ```console
 $ make 'CExe(@sources)' sources='hello.c empty.c'
 #-> CC(empty.c)
-gcc -c -o .out/CC.c/empty.o empty.c -O2 -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/empty.c.d
+gcc -c -o .out/CC.c/empty.o empty.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/empty.c.d
 #-> CExe(@sources)
 gcc -o .out/CExe_@/sources .out/CC.c/hello.o .out/CC.c/empty.o 
 
@@ -236,7 +236,7 @@ $ make Run@sources sources='hello.c binsort.c'
 .out/CExe.c/hello  
 Hello world.
 #-> CC(binsort.c)
-gcc -c -o .out/CC.c/binsort.o binsort.c -O2 -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
+gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
 #-> CExe(binsort.c)
 gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o 
 #-> Run(binsort.c)
@@ -295,8 +295,8 @@ $ cp Makefile2 Makefile
 $ cat Makefile
 sources = hello.c binsort.c
 
-Alias(default).in = Exec@sources
-Alias(deploy).in = Copy@CExe@sources
+default = Exec@sources
+deploy = Copy@CExe@sources
 
 include ../minion.mk
 
@@ -342,7 +342,7 @@ show a couple of examples, and then dive into how and why they work.
 ```console
 $ make 'CC(hello.c).objFlags=-Os'
 #-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -Os -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
+gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
 gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
 #-> Exec(hello.c)
@@ -362,7 +362,7 @@ We can make this change apply more widely:
 ```console
 $ make CC.objFlags=-Os
 #-> CC(binsort.c)
-gcc -c -o .out/CC.c/binsort.o binsort.c -Os -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
+gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
 #-> CExe(binsort.c)
 gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o 
 #-> Exec(binsort.c)
@@ -522,7 +522,7 @@ CC(hello.c) inherits from: CC _CC CCBase _CCBase Builder _Builder
 
    _CCBase.command = {compiler} -c -o {@} {<} {flags} -MMD -MP -MF {depsMF}
 
-Its value is: 'gcc -c -o .out/CC.c/hello.o hello.c -O2 -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d'
+Its value is: 'gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d'
 
 
 
@@ -588,14 +588,14 @@ only to define `command`.
 ```console
 $ make 'Sizes(CC(hello.c),CCg(hello.c))'
 #-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -O2 -std=c99 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
+gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CCg(hello.c)
-gcc -c -o .out/CCg.c/hello.o hello.c -g -std=c99 -Wall -Werror   -MMD -MP -MF .out/CCg.c/hello.c.d
+gcc -c -o .out/CCg.c/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/CCg.c/hello.c.d
 #-> Sizes(CC(hello.c),CCg(hello.c))
 wc -c .out/CC.c/hello.o .out/CCg.c/hello.o
      744 .out/CC.c/hello.o
-    2160 .out/CCg.c/hello.o
-    2904 total
+    2112 .out/CCg.c/hello.o
+    2856 total
 
 ```
 
@@ -674,9 +674,9 @@ $ cp Makefile4 Makefile
 $ cat Makefile
 Variants.all = debug fast small
 
-Alias(sizes).in = Sizes(CExe@sources)
-Alias(all-sizes).in = Variants(Alias(sizes))
-Alias(default).in = Alias(sizes)
+sizes = Sizes(CExe@sources)
+all-sizes = Variants(Alias(sizes))
+default = Alias(sizes)
 
 sources = hello.c binsort.c
 
@@ -718,62 +718,62 @@ defaults to the first word in `Variants.all`.
 ```console
 $ make sizes           # sizes for the default (first) variant "debug"
 #-> CC(hello.c)
-gcc -c -o .out/debug/CC.c/hello.o hello.c -g -std=c99 -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/hello.c.d
+gcc -c -o .out/debug/CC.c/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/hello.c.d
 #-> CExe(hello.c)
 gcc -o .out/debug/CExe.c/hello .out/debug/CC.c/hello.o 
 #-> CC(binsort.c)
-gcc -c -o .out/debug/CC.c/binsort.o binsort.c -g -std=c99 -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/binsort.c.d
+gcc -c -o .out/debug/CC.c/binsort.o binsort.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/binsort.c.d
 #-> CExe(binsort.c)
 gcc -o .out/debug/CExe.c/binsort .out/debug/CC.c/binsort.o 
 #-> Sizes(CExe@sources)
 wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
-   33672 .out/debug/CExe.c/hello
+   33656 .out/debug/CExe.c/hello
    33944 .out/debug/CExe.c/binsort
-   67616 total
+   67600 total
 
 ```
 ```console
 $ make sizes V=fast    # sizes for the "fast" variant
 #-> CC(hello.c)
-gcc -c -o .out/fast/CC.c/hello.o hello.c -O3 -std=c99 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/hello.c.d
+gcc -c -o .out/fast/CC.c/hello.o hello.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/hello.c.d
 #-> CExe(hello.c)
 gcc -o .out/fast/CExe.c/hello .out/fast/CC.c/hello.o 
 #-> CC(binsort.c)
-gcc -c -o .out/fast/CC.c/binsort.o binsort.c -O3 -std=c99 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/binsort.c.d
+gcc -c -o .out/fast/CC.c/binsort.o binsort.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/binsort.c.d
 #-> CExe(binsort.c)
 gcc -o .out/fast/CExe.c/binsort .out/fast/CC.c/binsort.o 
 #-> Sizes(CExe@sources)
 wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
    33432 .out/fast/CExe.c/hello
-   33480 .out/fast/CExe.c/binsort
-   66912 total
+   33464 .out/fast/CExe.c/binsort
+   66896 total
 
 ```
 ```console
 $ make all-sizes       # sizes for *all* variants
 #-> Sizes(CExe@sources)
 wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
-   33672 .out/debug/CExe.c/hello
+   33656 .out/debug/CExe.c/hello
    33944 .out/debug/CExe.c/binsort
-   67616 total
+   67600 total
 #-> Sizes(CExe@sources)
 wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
    33432 .out/fast/CExe.c/hello
-   33480 .out/fast/CExe.c/binsort
-   66912 total
+   33464 .out/fast/CExe.c/binsort
+   66896 total
 #-> CC(hello.c)
-gcc -c -o .out/small/CC.c/hello.o hello.c -Os -std=c99 -Wall -Werror   -MMD -MP -MF .out/small/CC.c/hello.c.d
+gcc -c -o .out/small/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/hello.c.d
 #-> CExe(hello.c)
 gcc -o .out/small/CExe.c/hello .out/small/CC.c/hello.o 
 #-> CC(binsort.c)
-gcc -c -o .out/small/CC.c/binsort.o binsort.c -Os -std=c99 -Wall -Werror   -MMD -MP -MF .out/small/CC.c/binsort.c.d
+gcc -c -o .out/small/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/binsort.c.d
 #-> CExe(binsort.c)
 gcc -o .out/small/CExe.c/binsort .out/small/CC.c/binsort.o 
 #-> Sizes(CExe@sources)
 wc -c .out/small/CExe.c/hello .out/small/CExe.c/binsort
    33432 .out/small/CExe.c/hello
-   33480 .out/small/CExe.c/binsort
-   66912 total
+   33464 .out/small/CExe.c/binsort
+   66896 total
 
 ```
 

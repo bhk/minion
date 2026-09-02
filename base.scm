@@ -113,25 +113,97 @@
 ;;
 (define (_isAlias name)
   &native
-  (if (filter "s% r%" (._. (native-flavor (.. "Alias(" name ").in"))
+  (if (filter "s% r%" (._. (native-flavor name)
+                           (native-flavor (.. "Alias(" name ").in"))
                            (native-flavor (.. "Alias(" name ").command"))))
       (.. "Alias(" name ")")))
 
 (export (native-name _isAlias) 1)
 
 
-;; Translate goal NAME into an instance that will generate a rule whose
-;; `out` will match NAME, *if* NAME is an alias, instance, or indirection.
-;; Otherwise, it must be a valid target in a Make rule, and we return empty.
+;; If NAME is a goal return its instance ID form; otherwise empty.
 ;;
-(define (_goalToID name)
+(define (_isGoal name)
+  &native
+  &public
+  (or (_isInstance name)
+      (_isIndirect name)
+      (_isAlias name)))
+
+(export (native-name _isGoal) 1)
+
+
+;; If goal NAME is a Minion goal (alias, instance, or indirection), then
+;; return an instance that generates a Make rule for it.  The rule must
+;; match NAME and ensure that the appropriate Minion goal is built.
+;;
+;; Otherwise, return empty.
+;;
+;; This is used by Minion to construct the root set of Minion instances from
+;; Make command-line goals.
+;;
+;; Examples:
+;;
+;;    "help"     -->  "Alias(help)"
+;;    "CC(a.c)"  -->  "_BuildGoal(CC(a.c))"
+;;    "@X"       -->  "_BuildGoal(@X)"
+;;    "foo"      -->  ""           (presumably a matching Make rule exists)
+;;
+(define (_buildGoalID name)
   &native
   (if (or (_isInstance name)
           (_isIndirect name))
-      (.. "_Goal(" name ")")
+      (.. "_BuildGoal(" name ")")
       (_isAlias name)))
 
-(export (native-name _goalToID) 1)
+(export (native-name _buildGoalID) 1)
+
+
+;; Assign a simple variable named NAME to VALUE; return VALUE.
+;;
+;; When NAME contains `)` or `:`-before-`=` it will cause problems later
+;; when using $(call NAME) or $(NAME); see varnames.mk.
+;;
+;; (native-value NAME) -- `$(value NAME)` in Make -- is the reliable way to
+;; access the value.
+;;
+(define (_set name value)
+  &public
+  &native
+  (native-eval "$1 := $2")
+  value)
+
+(export (native-name _set) 1)
+
+(begin
+  (define `(test key value)
+    (_set key value)
+    (expect (native-value key) value))
+  (test "test_x \ty(" 1)
+  (test "test_set" "a\\b#c\\#\\\\$v\nz")
+  (test "test$:a=b(" "a\\b#c\\#\\\\$v\nz"))
+
+
+(define globLog
+  &public
+  "")
+
+;; Same as $(wildcard ...), but keeps a log of patterns matched.
+;;
+(define (_wildcard globs)
+  &public
+  &native
+  (_set (native-name globLog) (sort (._. globLog globs)))
+  (wildcard globs))
+
+(export (native-name _wildcard) 1)
+
+(begin
+  ;; test _wildcard
+  (expect "base.scm" (_wildcard "ba*.scm"))
+  (expect "base.scm" (_wildcard "b*e.scm"))
+  (expect (sort "ba*.scm b*e.scm") globLog))
+
 
 
 ;; Return the variable portion of indirection ID.  Return nil if the ID ends
@@ -156,7 +228,7 @@
         (.. "Indirection '" id "' references undefined variable '" (_ivar id) "'"))
     (if where
         (.. "\nFound while expanding "
-            (if (filter "_Goal(%" where)
+            (if (filter "_BuildGoal(%" where)
                 "command line goal"
                 where))))))
 
@@ -169,7 +241,7 @@
   &native
   (define `(expand var indir)
     (if (findstring "*" var)
-        (wildcard var)
+        (_wildcard var)
         (if (undefined? var)
             (_EI indir where)
             (_expandX (native-var var) var))))
@@ -199,6 +271,7 @@
 ;;
 (define (_expand list ?prop)
   &native
+  &public
   (if (findstring "@" list)
       (_expandX list (.. _self "." prop))
       list))
@@ -227,31 +300,6 @@
     nil)
 
   nil)
-
-
-;; Assign a simple variable named NAME to VALUE; return VALUE.
-;;
-;; When NAME contains `)` or `:`-before-`=` it will cause problems later
-;; when using $(call NAME) or $(NAME); see varnames.mk.
-;;
-;; (native-value NAME) -- `$(value NAME)` in Make -- is the reliable way to
-;; access the value.
-;;
-(define (_set name value)
-  &public
-  &native
-  (native-eval "$1 := $2")
-  value)
-
-(export (native-name _set) 1)
-
-(begin
-  (define `(test key value)
-    (_set key value)
-    (expect (native-value key) value))
-  (test "test_x \ty(" 1)
-  (test "test_set" "a\\b#c\\#\\\\$v\nz")
-  (test "test$:a=b(" "a\\b#c\\#\\\\$v\nz"))
 
 
 ;; Assign a recursive variable NAME, and return NAME.

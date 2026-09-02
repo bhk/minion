@@ -54,29 +54,42 @@ will identify the object file as an input and prerequisite.
 
 Aliases are names that may be used on the command line as goals.
 
-If your makefile defines a variable named `Alias(NAME).in` or
-`Alias(NAME).command`, then `NAME` is a valid *alias*.  The value of the
-`.in` variable, if defined, is an ingredient list that identifies what the
-alias will cause to be built.  The value of the `.command` variable, if
-defined, is a shell command to be executed when the alias is named as a
-goal.  If both are defined, the command will be executed after all the
-ingredients are buit.
+The simplest way to define an alias is to assign a variable of the same
+name.  Its value will be treated as an ingredient list.  For example, if
+your makefile contains:
 
-When defined, `Alias(NAME)` is a valid instance, so `make NAME` is really
-just a shorthand for `make 'Alias(NAME)'`.  Alias names can be specified as
-*goals* (that is, on the make command line), but they are not supported in
-ingredient lists (in your makefile).  If you want to make use of an alias
-definition in an ingredient list, you can use its instance name.  For
-example:
+    all = Run(CExe(main.c))
 
-   Alias(all).in = Alias(default) Alias(tests)
+...then `make all` will build and run `main.c`.
+
+Alias names can be given as *goals* -- that is, on the Make command line --
+but cannot be used in ingredient lists or other contexts were an instance ID
+is needed.  In those contexts, you can use `Alias(NAME)` as the instance ID
+for the alias.  For example:
+
+    default = Alias(test) Alias(run)
+    test = Test(foo_test.c)
+    run = Run(CExe(main.c,foo.c))
+
+An alternative way of defining an alias is to define either the `in` or
+`command` property for the Alias instance.  Some examples:
+
+    Alias(scrub).command = rm -f .out/*.tmp
+
+The above example is functionally equivalent to a vanilla Make rule:
+
+    scrub: ; rm -f .out/*.tmp
+
+One motivation for using the Minion syntax is that Minion instances can
+express dependencies on other Minion instances, whereas Make rules know only
+about file names.
 
 
 ## Indirections
 
 An **indirection** is an expression that takes the form `@GROUP` or
 `CLASS@GROUP`.  `GROUP` is the name of a varible, or if it contains `*`, it
-is a pattern to be expanded with `$(wildcard ...)`.
+is a pattern to be expanded the same as with `$(wildcard ...)`.
 
 Indirections may appear in [ingredient lists](#ingredients) or on the
 command line.  When Minion examines a goal or an ingredient list, it
@@ -195,49 +208,42 @@ When using `minionCache`, you can still build uncached goals -- goals that
 are not listed in the `minionCache` word list.  Minion will use cached rules
 when they are present, and dynamically generate any other required rules.
 
-Any changes to your makefile will invalidate the cached makefile, so
-your normal workflow is not impaired by caching.
+Any changes to your makefile will invalidate the rule cache, so caching
+generally will not complicate your workflow or compromise the integrity of
+incremental builds.  However, there are some external dependencies that are
+not controlled for and could cause problems:
 
-However, there are some interactions with other features of Minion that are
-not quite polished away, so when using caching you should be aware of the
-following potential pitfalls:
-
-  1. When the makefile makes refence to external variables that affect rule
-     generation and differ between invocations.  This can include:
+  1. External variables referenced by your makefile.
 
       * Environment variables: e.g. `OUTDIR=../foo make`
       * Make command-line variables: e.g. `make CC.compiler=gcc`.
 
-  2. When the makefile's rule generation logic uses `$(wildcard ...)` or
-     `$(shell ...)` or employs wildcards in Minion indirections --
-     e.g. `CC@*.c`.
+  2. Calls to `$(wildcard ...)` or `$(shell ...)` in your Makefile.
 
-In order to avoid thes problems when using caching, the following options
+In order to avoid these problems when using caching, the following options
 are available:
 
-  * Avoid references to external variables, and to `$(wildcard ...)`,
-    `$(shell ...)`, and wildcard indirections -- e.g. `Test@*_q.c` -- in
-    your makefile.
+  * Instead of `$(wildcard ...)`, use wildcard indirections --
+    e.g. `CC(@*.c)` -- or `$(call _wildcard,...)`.  When these are used,
+    Minion is aware of these dependencies and can rebuild the cache file
+    when wildcard results change.
 
-  * If you rarely invoke make with special variable bindings, inclue
-    `minionCache=` include on the command line to disable use of the cache
-    for that invocation.
+  * If you want to invoke make with command-line variable bindings, e.g. for
+    experimentation, include `minionCache=` on the command line to disable
+    use of the cache for that invocation.
 
-  * If only a few instance have such external dependencies, set the variable
-    `minionNoCache` in your makefile to a list of such instances.  These
-    will then be excluded from the cache, while still allowing caching of
-    all other instances.  For example:
+  * If you want to have a limited number of build steps that depend on
+    `$(shell ...)` or external variables, you can explicitly exclude them
+    from caching by setting the variable `minionNoCache`. For example:
 
         ...
         minionCache = default
-        minionNoCache = CExe(@prog)
-        ...
-        prog = $(wildcard *.c)
+        minionNoCache = VersionStamp(prog)
         ...
 
-    Note that whereas `minionCache` will include all transitive dependencies
-    of the listed instances, `minionNoCache` does not.  It is intended to
-    target individual build steps that reference external variables.
+    Note that whereas `minionCache` follows all transitive dependencies,
+    `minionNoCache` does not.  Non-cached instances may be upstream and
+    downstream of cached instances.
 
 
 ## Builders
@@ -393,7 +399,7 @@ For convenience or readability, instead of listing all ingredients in
 arguments, users can use a placeholder argument and then define `in` for
 that instance, as in:
 
-   Alias(default).in = Exe(prog)
+   default = Exe(prog)
    Exe(prog).in = foo.c bar.c baz.c
 
 `Exe(prog)` will create an executable equivalent to
@@ -509,22 +515,23 @@ but write inputs and outputs to stdout.
 
 ### `make clean`
 
-By default, `make clean` will remove `$(VOUTDIR)`.  User makefiles can
+Typing `make clean` will remove `$(VOUTDIR)`, thereby deleting all output
+files in a typical Minion use case.  This behavior is specified by the
+definition of `Alias(clean).command` in `minion.mk`.  User makefiles can
 change this behavior by defining `in` or `command` properties for
 `Alias(clean)`.
 
-When goals not named `clean` are named along with `clean` on the command
-line, it changes the handling of those other goals and `clean`.  Instead of
-deleting `$(VOUTDIR)`, it will delete the targets of the listed goals and
-all of their dependencies.  This can be useful for removing build outputs
-that fall outside of `$(VOUTDIR)`, or for triggering more limited cleanup.
+When other goals are named in addition to `clean` -- e.g. `make clean tests`
+-- then `Alias(clean)` is *not* invoked, and instead Minion operates in a
+different mode.  It will delete the output files of those listed goals and
+the output files of all their dependencies.  This can be useful for removing
+build outputs that fall outside of `$(VOUTDIR)`, or for triggering more
+limited cleanup.  Minion accomplishes this using its `Clean` class -- for
+example, `make clean foo` is shorthand for `make 'Clean(Alias(foo))'`.
+Instances of `Clean` can be named as dependencies of `Alias(clean)` to
+ensure that outputs outside of `$(VOUTDIR)` are cleaned.  For example,
 
-The `Clean` class is used by `make clean`.  For example, `make
-'Clean(Alias(default))'` is equivalent to `make clean default`.  Instances
-of `Clean` can be named as dependencies of `Alias(clean)` to ensure that
-outputs outside of `$(VOUTDIR)` are cleaned.  For example,
-
-    Alias(default).in = Copy(Exe(prog.c),dir:../deploy)
+    default = Copy(Exe(prog.c),dir:../deploy)
     Alias(clean).in = Clean(Alias(default))
 
 
@@ -689,6 +696,12 @@ within [recursive](#simple-and-recursive-variables) property definitions.
   `CC` = a context value to pass to `CF`
 
      $(call CF,CC,node) -> children
+
+* `$(call _wildcard,PATTERNS)`
+
+  This provides the same functionality as `$(wildcard PATTERNS)` but also
+  makes Minion aware of the external dependency, allowing rule cache files
+  to be automatically freshened when wildcard results change.
 
 
 ## Syntax
