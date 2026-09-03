@@ -20,22 +20,26 @@ include ../minion.mk
 ```
 
 This makefile doesn't describe anything to be built, but it does invoke
-Minion, so when we type `make` in this directory, Minion will process the
-goals.  A *goal* is a target name that is listed on the command line.  Goals
-determine what Make actually does when it is invoked.
+Minion, so it is enough to get us started with some examples.
 
 
 ## Instances
 
-The salient feature of Minion is instances.  An instance is a description of
-a build step.  Instances can be provided as goals or as inputs to other
-build steps.
+The salient feature of Minion is instances.  An instance is an expression
+that describes a build step.
 
 An instance is written `CLASS(ARGS)`.  `ARGS` is a comma-delimited list of
-arguments, each of which is typically the name of an input to the build
-step.  `CLASS` is the name of a class that is defined by Minion or your
-makefile.  To get started, let's use some classes that are built into
-Minion:
+arguments.  `CLASS` is the name of a class that is defined by Minion or your
+makefile (more about classes later).  The meaning of `ARGS` can vary based
+on the class, but typically it describes an input or list of inputs, and it
+is also used to construct a default for the output file name.
+
+To get started, let's demonstrate some instances using classes that are
+built into Minion.  We don't even need to write these in a makefile because
+Minion can process instances when they are provided as Make goals
+(command-line arguments).  One would not usually pass instance names on the
+command line like this, but it is useful for illustration in this case, and
+it can be handy for exploration at any stage of a project.
 
 ```console
 $ make 'CC(hello.c)'
@@ -46,35 +50,41 @@ gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .o
 ```console
 $ make 'CExe(CC(hello.c))'
 #-> CExe(CC(hello.c))
-gcc -o .out/CExe.o_CC.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.o_CC.c/hello .out/CC.c/hello.o
 
 ```
 ```console
 $ make 'Run(CExe(CC(hello.c)))'
 #-> Run(CExe(CC(hello.c)))
-.out/CExe.o_CC.c/hello  
+.out/CExe.o_CC.c/hello
 Hello world.
 
 ```
+
+One thing to note here is that inputs can generally be specified as either
+ordinary source file names -- `hello.c` -- or as Minion instances.  When an
+instance is supplied, the build step will operate on that instance's output
+file.
 
 
 ## Inference
 
 Some classes have the ability to *infer* intermediate build steps, based on
 the extension of the input file (or files).  For example, if we provide a
-".c" file as an argument to `CExe`, it knows how to generate the
-intermediate ".o" artifact.
+".c" file as an argument to `CExe`, it knows that it should use `CC` to
+generate the intermediate ".o" artifact.
 
 ```console
 $ make 'CExe(hello.c)'
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 
 ```
 
-This command linked the program, but did not rebuild `hello.o`.  This is
-because we have already built the inferred dependency, `CC(hello.c)`.  Doing
-nothing, whenever possible, is what a build system is all about.
+Observe that this command linked the program, but did not rebuild `hello.o`.
+This is because we have already built the inferred dependency,
+`CC(hello.c)`, in a previous invocation.  Doing nothing, whenever possible,
+is what a build system is all about.
 
 We can demonstrate that everything will get re-built, if necessary, by
 re-issuing this command after invoking `make clean`.  The `clean` target is
@@ -87,7 +97,7 @@ rm -rf .out/
 #-> CC(hello.c)
 gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 
 ```
 
@@ -100,9 +110,9 @@ rm -rf .out/
 #-> CC(hello.c)
 gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 #-> Run(hello.c)
-.out/CExe.c/hello  
+.out/CExe.c/hello
 Hello world.
 
 ```
@@ -120,13 +130,14 @@ a goal, and so on.
 ```console
 $ make 'Run(hello.c)'
 #-> Run(hello.c)
-.out/CExe.c/hello  
+.out/CExe.c/hello
 Hello world.
 
 ```
 
-A class named `Exec` also runs a program, but it captures its output in a
-file, so its targets are *not* phony.
+Minion provides a class named `Exec` that also runs a program, but captures
+its output in a file. `Exec` targets are *not* phony, and can be used in a
+chain of processing.
 
 ```console
 $ make 'Exec(hello.c)'
@@ -135,8 +146,8 @@ $ make 'Exec(hello.c)'
 
 ```
 
-Using `Exec` is a way to run unit tests.  The existence of the output file
-is evidence that the unit test passed (the program exited without an error
+`Exec` can be used to run unit tests.  The existence of the output file is
+evidence that the unit test passed (the program exited without an error
 code).  If we want to view the output, we can use `Print`, a class that
 generates a phony target that writes its input to `stdout`:
 
@@ -169,12 +180,12 @@ Run(hello.c) is an instance.
 
 {out} = .out/Run.c/hello.out
 
-Command:  .out/CExe.c/hello  
+Command:  .out/CExe.c/hello
 
-Direct dependencies: 
+Direct dependencies:
    CExe(hello.c)
 
-Indirect dependencies: 
+Indirect dependencies:
    CC(hello.c)
 
 
@@ -187,10 +198,10 @@ Exec(hello.c) is an instance.
 
 Command: (  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
 
-Direct dependencies: 
+Direct dependencies:
    CExe(hello.c)
 
-Indirect dependencies: 
+Indirect dependencies:
    CC(hello.c)
 
 
@@ -210,7 +221,7 @@ $ make 'CExe(@sources)' sources='hello.c empty.c'
 #-> CC(empty.c)
 gcc -c -o .out/CC.c/empty.o empty.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/empty.c.d
 #-> CExe(@sources)
-gcc -o .out/CExe_@/sources .out/CC.c/hello.o .out/CC.c/empty.o 
+gcc -o .out/CExe_@/sources .out/CC.c/hello.o .out/CC.c/empty.o
 
 ```
 
@@ -224,7 +235,7 @@ $ make help Run@sources sources='hello.c binsort.c'
 
    sources = hello.c binsort.c
 
-It expands to the following targets: 
+It expands to the following targets:
    Run(hello.c)
    Run(binsort.c)
 
@@ -233,14 +244,14 @@ It expands to the following targets:
 ```console
 $ make Run@sources sources='hello.c binsort.c'
 #-> Run(hello.c)
-.out/CExe.c/hello  
+.out/CExe.c/hello
 Hello world.
 #-> CC(binsort.c)
 gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o 
+gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o
 #-> Run(binsort.c)
-.out/CExe.c/binsort  
+.out/CExe.c/binsort
 srch(7) = 5
 srch(6) = 9
 srch(12) = 9
@@ -258,7 +269,7 @@ $ make help 'Run@*.c'
 
    *.c
 
-It expands to the following targets: 
+It expands to the following targets:
    Run(binsort.c)
    Run(empty.c)
    Run(hello.c)
@@ -275,11 +286,10 @@ with a simple command, like `make` or `make deploy`.  Minion provides
 *aliases* for this purpose.  An alias is a name that identifies a phony
 target instead of an actual file.
 
-To define an alias, do one of the following (or both):
+To define an alias named NAME, do one of the following (or both):
 
-1. Define a variable named `Alias(NAME).in`.  The value you assign to it
-   will be treated as a list of targets to be built when NAME is given as a
-   goal.
+1. Define a variable named `NAME`.  The value you assign to it will be
+   treated as a list of targets to be built when NAME is given as a goal.
 
 2. Define a variable named `Alias(NAME).command`.  The value you assign
    to is will be treated as a command to be executed when NAME is given
@@ -311,7 +321,8 @@ cp .out/CExe.c/binsort .out/Copy/binsort
 ```
 
 If no goals are provided on the command line, Minion attempts to build the
-alias or target named `default`, so these commands do the same thing:
+alias or target named `default`, so the commands `make` and `make default`
+do the same thing.
 
 ```console
 $ make
@@ -325,26 +336,72 @@ $ make default
 ```
 
 One last note about aliases: alias names are just for use as goals on the
-Make command line.  Within a Minion makefile, when specifying targets we use
-only instances, source file names, or targets of Make rules.  So if you want
-to refer to one alias as a dependency of another alias, use its instance
-name: `Alias(NAME)`.  For example:
+Make command line.  Within a Minion makefile, when specifying inputs we use
+only instances, indirections, source file names, or targets of Make rules.
+So if you want to refer to one alias as a dependency of another alias, use
+its instance name: `Alias(NAME)`.  For example:
 
-    Alias(default).in = Alias(exes) Alias(tests)
+    default = Alias(exes) Alias(tests)
+
+
+## Where Is My Binary?
+
+Automatically-assigned "hidden" output paths are a big benefit of Minion's
+approach.  It simplifies build files, and simply "just works" as builds to
+grow more complex to include different variant builds, or multiple derived
+artifacts within a single variant.  As a side benefit, `./.out/` as a default
+output directory keeps your source tree looking nice and tidy and requires
+only one very simple, versatile `.gitignore` rule:  `.*`.
+
+However, if you find yourself worrying about "but where is my binary?",
+there are a few things to note.
+
+First, you can just type `make help GOAL` and it will tell you where the
+output file is, and you can cut and paste it.
+
+Second, you can easily customize the output file of an instance by
+overriding its `out` property.  (But at this point you should be careful to
+avoid conflicts in multi-variant builds, etc.)
+
+But most importantly, consider that there should be very few if any
+occasions to resort to these approaches.  Asking for the output path implies
+you are falling short of the goal of a repeatable, reliable software
+development process.  You might think you are constrained to some hard-coded
+set of classes by your build system, and you are probably missing
+opportunities to streamline your workflow.  Running programs you build,
+testing built artifacts, packaging those artifacts ... all these should be
+automated, and probably can be with Minion.
+
+On the odd occasions where you want to explore intermediate output files,
+`make help GOAL`, `make graph`, and `make 'Graph(GOAL)'` will let you
+explore the dependency tree and any of the files involved.
 
 
 ## Properties and Customization
 
 A build system should make it easy to customize the way build results are
-generated, and to define entirely new, unanticipated build steps.  Let's
-show a couple of examples, and then dive into how and why they work.
+generated, and to define entirely new, unanticipated build steps.
+
+Minion includes built-in C and C++ classes that, while suitable for many
+command-line executable projects, are not intended to be exhaustive, and are
+mainly intended for demonstration purposes and as examples of how to
+leverage the functionality of the `Builder` class, strategically overriding
+properties.  Even most C/C++ projects will end up with a set of custom build
+rules, based on their unique needs.  Non-C/C++ projects will leverage
+different toolchains, which might change from year to year.  The key
+requirement of a build system is to enable those custom features to be added
+easily, elegantly, and maintainably.
+
+Let's dive in to some customization using Make command-line variable
+assignments -- again, not what one would do in a typical development
+workflow, but a convenient way to illustrate and explore functionality.
 
 ```console
 $ make 'CC(hello.c).objFlags=-Os'
 #-> CC(hello.c)
 gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 #-> Exec(hello.c)
 (  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
 
@@ -354,8 +411,8 @@ Observe how the resulting `gcc` command line differs from that of the
 earlier `CC(hello.c)`.  [By the way, also note that Minion knew to
 re-compile the object file, even when no input files had changed.  The
 previous build result became invalid when the command line changed.  This
-fine-grained dependency tracking means that when using Minion you almost
-never need to `make clean`, even after you have edited your makefile.]
+fine-grained dependency tracking means that with Minion you don't need to
+`make clean` after editing your makefile.]
 
 We can make this change apply more widely:
 
@@ -364,7 +421,7 @@ $ make CC.objFlags=-Os
 #-> CC(binsort.c)
 gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o 
+gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o
 #-> Exec(binsort.c)
 (  .out/CExe.c/binsort   ) > .out/Exec.c/binsort.out || ( rm -f .out/Exec.c/binsort.out; false )
 
@@ -379,7 +436,7 @@ term "instance"), but in Minion there is no mutable state associated with
 instances.
 
 We can best illustrate the basic principles of property evaluation with a
-simple example that avoids the complexities of `CC` and other Minion rules.
+simpler example that avoids the complexities of `CC` and other Minion rules.
 
 ```console
 $ cat MakefileP
@@ -564,13 +621,13 @@ supported.  Instead, define your own sub-classes.
 $ cp Makefile3 Makefile; diff Makefile2 Makefile3
 5a6,13
 > CC.langFlags = {inherit} -Wextra
-> 
+>
 > CCg.inherit = CC
 > CCg.objFlags = -g
-> 
+>
 > Sizes.inherit = Run
 > Sizes.command = wc -c {^}
-> 
+>
 
 ```
 
@@ -720,11 +777,11 @@ $ make sizes           # sizes for the default (first) variant "debug"
 #-> CC(hello.c)
 gcc -c -o .out/debug/CC.c/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/debug/CExe.c/hello .out/debug/CC.c/hello.o 
+gcc -o .out/debug/CExe.c/hello .out/debug/CC.c/hello.o
 #-> CC(binsort.c)
 gcc -c -o .out/debug/CC.c/binsort.o binsort.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/debug/CExe.c/binsort .out/debug/CC.c/binsort.o 
+gcc -o .out/debug/CExe.c/binsort .out/debug/CC.c/binsort.o
 #-> Sizes(CExe@sources)
 wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
    33656 .out/debug/CExe.c/hello
@@ -737,11 +794,11 @@ $ make sizes V=fast    # sizes for the "fast" variant
 #-> CC(hello.c)
 gcc -c -o .out/fast/CC.c/hello.o hello.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/fast/CExe.c/hello .out/fast/CC.c/hello.o 
+gcc -o .out/fast/CExe.c/hello .out/fast/CC.c/hello.o
 #-> CC(binsort.c)
 gcc -c -o .out/fast/CC.c/binsort.o binsort.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/fast/CExe.c/binsort .out/fast/CC.c/binsort.o 
+gcc -o .out/fast/CExe.c/binsort .out/fast/CC.c/binsort.o
 #-> Sizes(CExe@sources)
 wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
    33432 .out/fast/CExe.c/hello
@@ -764,11 +821,11 @@ wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
 #-> CC(hello.c)
 gcc -c -o .out/small/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/small/CExe.c/hello .out/small/CC.c/hello.o 
+gcc -o .out/small/CExe.c/hello .out/small/CC.c/hello.o
 #-> CC(binsort.c)
 gcc -c -o .out/small/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/small/CExe.c/binsort .out/small/CC.c/binsort.o 
+gcc -o .out/small/CExe.c/binsort .out/small/CC.c/binsort.o
 #-> Sizes(CExe@sources)
 wc -c .out/small/CExe.c/hello .out/small/CExe.c/binsort
    33432 .out/small/CExe.c/hello
@@ -782,13 +839,13 @@ wc -c .out/small/CExe.c/hello .out/small/CExe.c/binsort
 
 To summarize the key concepts in Minion:
 
- - *Instances* are function-like descriptions of build products.  They can
-   be given as Make command line goals, and named as inputs to other
-   instances.  They take the form `CLASS(ARGUMENTS)`.
+ - *Instances* are function-call-like expressions that describe build steps.
+   They can be given as Make command line goals, and named as inputs to
+   aliases or other instances.  They take the form `CLASS(ARGUMENTS)`.
 
- - *Indirections* are short names that identify groups of targets.  They can
-   be used as arguments to instances, or in the value of an `in` property,
-   or on the command line.
+ - *Indirections* are expressions that name variables that hold groups of
+   targets.  They can be used as arguments to instances, or in the value of
+   an `in` property, or on the command line.
 
  - *Aliases* are short names that can be specified as goals on the command
    line.  An alias can identify a set of other targets to be built, or a
@@ -806,4 +863,3 @@ To summarize the key concepts in Minion:
    default variant first.  Use `make V=VARIANT TARGET` to build a specific
    variant of a target, and use `make 'Variants(TARGET)'` to build all
    variants of a target.
-
