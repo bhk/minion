@@ -32,6 +32,7 @@ promote-cmd = @\
    fi
 
 
+# Generate new minion.mk from ./minion.mk and Scam sources
 $(MO): *.scm minion.mk Makefile
 	@echo '#*> MO: Minion output'
 	@mkdir -p $(@D)
@@ -39,13 +40,15 @@ $(MO): *.scm minion.mk Makefile
 	scam minion.scm $@.2
 	cat $@.1 $@.2 > $@
 
+# Run tests on minion.mk
 $(TO): $(MO) fn-test.mk rule-test.mk
 	@echo '#*> TO: Test Output'
 	@mkdir -p $(@D)
 	make -f fn-test.mk MINION=$<
-	( make -f rule-test.mk MINION=$< ) > $@.log || ( cat $@.log ; false )
+	( MINION=$< make -f rule-test.mk ) > $@.log || ( cat $@.log ; false )
 	touch $@
 
+# Generate new demo.md
 $(DO): minion.mk demo/*
 	@echo '#*> DO: Demo Output'
 	@mkdir -p $(@D)

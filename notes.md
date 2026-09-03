@@ -557,15 +557,7 @@ it would *work*, but performance-wise it would not scale nicely.
 
 ## Minion Todo
 
- - _shell & _var dependency wrappers
-
-   Invalidate cached makefiles by detecting currently-untracked external
-   dependencies.  These are in addition to, or maybe supplanting, _wildcard.
-
-   Comprehensive.  More *focused* on expressions that actually affect the
-   generated rules.  On the downside, it can be easy to overlook a $(shell X)
-   vs. $(call _shell,X) ... or to forget ... or to waste time mixing up
-   $(call _shell,X) with $(_shell X).
+ - Aliases in ingredient lists
 
  - {inherit NAME} : Similar to {inherit}, but it looks up the inherited
    definition of a different property, not the one currently being

@@ -1,6 +1,9 @@
-# time.mk: A large fictional project for timing rule generation.
+# time.mk: Some benchmarking targets
 
+#----------------------------------------------------------------
+# default:  A large fictional project for timing rule generation.
 default = Work(Alias(all))
+
 
 all = Alias(tests) Alias(progs)
 tests = ExecTest@LinkTest@CC@files
@@ -27,7 +30,24 @@ ExecTest.inherit = Exec
 CC++.optFlags = -Os
 CC++.warnFlags = -W -Wall
 
+
+#----------------------------------------------------------------
+# inspect: Detect command-line vars.
+
+# ~100us per rep
+xi: ; @echo 'command-line vars: $(if $(call inspectVars),yes,no)'
+
+# ~28us per rep
+xi2: ; @echo 'command-line vars: $(if $(call inspectVars2),yes,no)'
+
+inspectVars = $(filter c%,$(foreach v,$(.VARIABLES),$(origin $v)))
+
+startVars := $(.VARIABLES)
+inspectVars2 = $(filter c%,$(foreach v,$(startVars),$(origin $v)))
+
+
+#----------------------------------------------------------------
 minionStart=1
 include $(or $(MINION),minion.mk)
-include x11.mk
+include slowdown.mk
 $(minionEnd)

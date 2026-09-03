@@ -6,7 +6,7 @@ thisFile := $(lastword $(MAKEFILE_LIST))
 MINION ?= minion.mk
 
 # Don't interfere with other tests running in parallel
-OUTDIR = .out/rule-test/
+OUTDIR ?= .out/rule-test/
 
 makeSelf = make -f $(thisFile)
 
@@ -15,36 +15,42 @@ default = Alias(cache-test) Alias(graph-test) Alias(clean-test)
 #----------------------------------------------------------------
 # cache-test
 #----------------------------------------------------------------
+#
+# We will be invoking the makefile recursively, but with a different OUTDIR.
+
+echoxxx = Echo(xxx)
+
+caOUTDIR = .out/cache-test/
+caCACHE = $(caOUTDIR)cache.mk
+caMAKE = minionCache=echoxxx minionNoCache='Echo(xx)' OUTDIR=$(caOUTDIR) $(makeSelf)
+
 
 Echo.inherit = Builder
 Echo.rule = .PHONY: {@}$(\n){inherit}
 Echo.in = $(patsubst %,Echo(%),$(patsubst x%,%,$(filter x%,$(_arg1))))
-Echo.command = @echo $(or $(TEXT),$(_argText)) > {@} {glob}
-Echo.glob = $(and $(call _wildcard,$(_arg1)),)
+# TEXT is an un-tracked external variable that influences the rule
+Echo.command = @echo echo=$(or $(TEXT),$(_argText))= > {@} {track}
+# Reference tracked external dependencies...
+Echo.track = $(and $(call _var,Echo.inherit)$(call _shell,echo foo)$(call _wildcard,$(_arg1)*),)
 
-Alias(echox).in = Echo(x)
 
 # ASSERT: minionCache accepts *goals*
 # ASSERT: indirect dependencies of $(minionCache) are cached
 # ASSERT: individual instance is excluded via $(minionNoCache)
+# ASSERT: command-line override is detected, bypassing cache
+# ASSERT: validity checks for _wildcard, _shell, _var are written
 define Alias(cache-test).command
   @echo '#*> cache-test'
-  @rm -rf $(OUTDIR)
-  $(makeSelf) echox 'minionCache=echox'
-  grep -q x $(call get,out,Echo(x))
-  grep -q '_cachedIDs = .*Echo(x)' $(VOUTDIR)/cache.mk
-  # Changes to command-line minionCache are not detected; the supported use
-  # case is setting minionCache within Makefile.  So... we make clean.
-  $(makeSelf) clean
-  $(makeSelf) 'Echo(xxx)' 'minionCache=Echo(xxx)' 'minionNoCache=Echo(xx)'
-  grep -q x $(call get,out,Echo(x))
-  grep -q xx $(call get,out,Echo(xx))
-  grep -q xxx $(call get,out,Echo(xxx))
-  TEXT=OVR $(makeSelf) 'Echo(xxx)' 'minionCache=Echo(xxx)'
-  grep -q x $(call get,out,Echo(x))   # cached
-  grep -q OVR $(call get,out,Echo(xx))  # not cached
-  grep -q xxx $(call get,out,Echo(xxx)) # cached
-  grep -q 'ifneq (,$$(wildcard x xxx))' $(VOUTDIR)/cache.mk
+  @rm -rf $(caOUTDIR)
+  $(caMAKE) 'Print(Echo(xx))' | grep -q echo=xx=
+  [ -f $(caCACHE) ]
+  TEXT=Z $(caMAKE) 'Print(Echo(xx))' | grep -q echo=Z=  # rule not cached
+  TEXT=Z $(caMAKE) 'Print(Echo(x))'  | grep -q echo=x=  # rule cached
+  $(caMAKE) TEXT=Z 'Print(Echo(x))'  | grep -q echo=Z=  # cached, but bypassed
+  TEXT=Z $(caMAKE) 'Print(Echo(x))'  | grep -q echo=x=  # back to cached version
+  grep -q '_cachedIDs = Alias(echoxxx) Echo(x) Echo(xxx)' $(caCACHE)
+  grep -q 'ifneq "foo" "$$(shell echo foo)"' $(caCACHE)
+  grep -q 'ifneq "Builder" "$$(Echo.inherit)"' $(caCACHE)
 endef
 
 #----------------------------------------------------------------

@@ -208,42 +208,50 @@ When using `minionCache`, you can still build uncached goals -- goals that
 are not listed in the `minionCache` word list.  Minion will use cached rules
 when they are present, and dynamically generate any other required rules.
 
-Any changes to your makefile will invalidate the rule cache, so caching
-generally will not complicate your workflow or compromise the integrity of
-incremental builds.  However, there are some external dependencies that are
-not controlled for and could cause problems:
+Any changes to your makefile will invalidate the rule cache, so caching will
+generally not complicate your workflow.  However, there are some situations
+that where the cached result might not produce the same result as a
+non-cached build:
 
-  1. External variables referenced by your makefile.
+  1. Calling `$(wildcard ...)` or `$(shell ...)` in your Makefile.
 
-      * Environment variables: e.g. `OUTDIR=../foo make`
-      * Make command-line variables: e.g. `make CC.compiler=gcc`.
+     To address this, call the Minion-provided functions `_wildcard` and
+     `_shell` instead.  These provide equivalent functionality, but keep
+     Minion informed of dependencies so that it can rebuild cache files when
+     the results change.  For example:
 
-  2. Calls to `$(wildcard ...)` or `$(shell ...)` in your Makefile.
+         $(wildcard *.c)  -->  $(call _wildcard,*.c)
 
-In order to avoid these problems when using caching, the following options
-are available:
+     Or better yet, when possible use wildcard [indirections](#indirections)
+     -- e.g. `@*.c` -- which also allow Minion to track these dependencies.
 
-  * Instead of `$(wildcard ...)`, use wildcard indirections --
-    e.g. `CC(@*.c)` -- or `$(call _wildcard,...)`.  When these are used,
-    Minion is aware of these dependencies and can rebuild the cache file
-    when wildcard results change.
+  2. Referencing environment variables in your makefile that change between
+     invocations.
 
-  * If you want to invoke make with command-line variable bindings, e.g. for
-    experimentation, include `minionCache=` on the command line to disable
-    use of the cache for that invocation.
+     While the first order of business would be to tightly control these
+     environmental dependencies in order to ensure repeatable builds, there
+     may remain variables you want your makefile to access, and which could
+     change in subsequent builds.  In these cases, you can access the
+     variables using `$(call _var,VARNAME)` instead of `$(VARNAME)`.  This
+     will allow Minion to detect changes that invalidate the rule cache.
 
-  * If you want to have a limited number of build steps that depend on
-    `$(shell ...)` or external variables, you can explicitly exclude them
-    from caching by setting the variable `minionNoCache`. For example:
+Variables assigned using Make's command line syntax -- e.g. `make all
+CC.flags=-W` -- do not have this problem.  Minion will bypass the cache
+whenever command-line assignments are used.
+
+If you have a limited number of build steps that depend on `$(shell ...)` or
+external variables, you can selectively exclude them from caching instead of
+tracking those dependencies and invalidting the entire cach file.  Just set
+`minionNoCache` to a list of IDs to exclude.
 
         ...
         minionCache = default
         minionNoCache = VersionStamp(prog)
         ...
 
-    Note that whereas `minionCache` follows all transitive dependencies,
-    `minionNoCache` does not.  Non-cached instances may be upstream and
-    downstream of cached instances.
+Note that whereas `minionCache` follows all transitive dependencies,
+`minionNoCache` does not.  Non-cached instances may be upstream and
+downstream of cached instances.
 
 
 ## Builders
@@ -699,9 +707,19 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
 * `$(call _wildcard,PATTERNS)`
 
-  This provides the same functionality as `$(wildcard PATTERNS)` but also
-  makes Minion aware of the external dependency, allowing rule cache files
-  to be automatically freshened when wildcard results change.
+  Return `$(wildcard PATTERNS)`, identifying this as a dependency, allowing
+  to rebuild rule cache files to be automatically when the wildcard result
+  changes.
+
+* `$(call _shell,COMMAND)`
+
+  Return `$(shell COMMAND)`, identifying this as a dependency, allowing to
+  rebuild rule cache files to be automatically when the COMMAND result changes.
+
+* `$(call _var,VARNAME)`
+
+  Return `$(VARNAME)`, identifying this as a dependency, allowing to rebuild
+  rule cache files to be automatically when the variable's value changes.
 
 
 ## Syntax

@@ -1,7 +1,7 @@
 # Minion
 
 Minion is a Make-based build tool (or library, or DSL, as you will). It lets
-you write makefiles this look like this:
+you write makefiles that look like this:
 
     default = Test(CExe(foo_test.c)) Run(CExe(main.c,foo.c))
     include minion.mk

@@ -435,11 +435,33 @@
            where))
 
 
-(define (_rcr3 cacheFile cachedIDs excludedIDs groupSize)
+;; Escape VALUE for inclusion literally in `ifeq "..." "..."` contexts.
+(define (_qesc value)
   &native
-  (define `tmpFile (.. cacheFile "_tmp_"))
+  &public
+  (subst "$" "$$"
+         "\"" "$(\\q)"
+         "#" "$(\\H)"
+         "\n" "$(\n)"
+         value))
 
-  (define `(groupText group)
+
+(define (_checkValue cacheFile oldValue newExpr)
+  &native
+  (.. "\nifneq \"" (_qesc oldValue) "\" \"" newExpr "\"\n"
+      "  " cacheFile ": $(_forceTarget)\n"
+      "endif\n"))
+
+
+(define (_rcr2 cacheFile includedIDs excludedIDs groupSize)
+  &native
+  (define `cachedIDs
+    (filter-out excludedIDs includedIDs))
+
+  (define `tmpFile
+    (.. cacheFile "_tmp_"))
+
+  (define `(groupRules group)
     (foreach (i (_ungroup group))
       (.. "\n" (get "rule" i)
           (if excludedIDs
@@ -447,35 +469,30 @@
                   (filter excludedIDs (_depsOf i))))
           "\n")))
 
-  (define `globCheck
-    (.. "\n"
-        "ifneq (" (wildcard globLog) ",$(wildcard " globLog "))\n"
-        "  " cacheFile ": $(_forceTarget)\n"
-        "endif\n"))
+  ;; Output validity checks for changes to _wildcard, _shell, or _var
+  ;; results, and check `minionCache` and `minionNoCache` just in case
+  ;; they were supplied via the environment.
+  (define `epilogue
+    (.. "_cachedIDs = " cachedIDs "\n"
+        (foreach (v (._. "minionCache" "minionNoCache" varLog))
+          (_checkValue cacheFile (native-var v) (.. "$(" v ")")))
+        (if globLog
+            (_checkValue cacheFile (wildcard globLog) (.. "$(wildcard " globLog ")")))
+        (foreach (cmd shellLog)
+          (_checkValue cacheFile (shell (promote cmd)) (.. "$(shell " (promote cmd) ")")))))
 
   (.. "@mkdir -p " (dir cacheFile) "\n"
-      "@echo '_cachedIDs = " cachedIDs "' > " tmpFile "\n"
+      "@> " tmpFile "\n"  ;; create/clear file
       (foreach (g (_group cachedIDs groupSize))
-        (.. "@" (_printf (groupText g)) " >> " tmpFile "\n"))
-      (if globLog
-          (.. "@" (_printf globCheck) " >> " tmpFile "\n"))
+        (.. "@" (_printf (groupRules g)) " >> " tmpFile "\n"))
+      ;; validity checks must be done *after* rules have been generated
+      "@" (_printf epilogue) " >> " tmpFile "\n"
       "@mv " tmpFile " " cacheFile "\n"))
 
 
-(define (_rcr2 cacheFile cacheVar noCacheVar groupSize)
+(define (_varToIDs varName)
   &native
-  &public
-  (define `cacheVar "minionCache")
-  (define `noCacheVar "minionNoCache")
-
-  (define `cacheExcludes
-    (filter "%)" (_goalsToIDs (native-var noCacheVar) noCacheVar)))
-
-  (define `cachedIDs
-    (filter-out cacheExcludes
-                (_rollup (_goalsToIDs (native-var cacheVar) cacheVar))))
-
-  (_rcr3 cacheFile cachedIDs cacheExcludes groupSize))
+  (_goalsToIDs (native-var varName) varName))
 
 
 ;; Return the Make recipe (sequence of command lines) that will
@@ -488,13 +505,19 @@
 ;;
 (define (_rulecacheRecipe cacheFile)
   &native
+  &public
+
   (declare _cacheGroupSize &native)
+  (define `includes (_rollup (_varToIDs "minionCache")))
+  (define `excludes (filter "%)" (_varToIDs "minionNoCache")))
 
   (print "Updating Minion cache...")
-  (_rcr2 cacheFile "minionCache" "minionNoCache" _cacheGroupSize))
+  (_rcr2 cacheFile includes excludes _cacheGroupSize))
 
 
 (export (native-name _goalsToIDs) 1)
 (export (native-name _rulecacheRecipe) nil)
 (export (native-name _rcr2) nil)
-(export (native-name _rcr3) nil)
+(export (native-name _varToIDs) 1)
+(export (native-name _checkValue) 1)
+(export (native-name _qesc) 1)

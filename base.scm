@@ -21,6 +21,7 @@
 
 (define \H &native &public "#")
 (define \n &native &public "\n")
+(define \q &native &public "\"")
 (set-native "[[" "{")
 (set-native "]]" "}")
 
@@ -184,9 +185,13 @@
   (test "test$:a=b(" "a\\b#c\\#\\\\$v\nz"))
 
 
-(define globLog
-  &public
-  "")
+;;--------------------------------
+;; External dependency wrappers: _wildcard, _shell, _var
+;;--------------------------------
+
+(define globLog &public "")
+(define shellLog &public "")
+(define varLog &public "")
 
 ;; Same as $(wildcard ...), but keeps a log of patterns matched.
 ;;
@@ -196,14 +201,54 @@
   (_set (native-name globLog) (sort (._. globLog globs)))
   (wildcard globs))
 
-(export (native-name _wildcard) 1)
-
 (begin
   ;; test _wildcard
   (expect "base.scm" (_wildcard "ba*.scm"))
   (expect "base.scm" (_wildcard "b*e.scm"))
   (expect (sort "ba*.scm b*e.scm") globLog))
 
+
+(define `(demote str)
+  &public
+  (subst " " "!0" (subst "!" "!1" str)))
+
+(define `(promote str)
+  &public
+  (subst "!1" "!" (subst "!0" " " str)))
+
+;; Same as $(shell ...), but logs commands issues.
+;;
+(define (_shell command)
+  &public
+  &native
+  (_set (native-name shellLog) (sort (._. shellLog (demote command))))
+  (shell command))
+
+(begin
+  ;; test _shell
+  (expect "base.scm" (_shell "echo ba*.scm"))
+  (expect "base.scm" (_shell "echo b*.scm"))
+  (expect "echo ba*.scm" (promote (word 2 shellLog))))
+
+
+(define (_var name)
+  &public
+  &native
+  (_set (native-name varLog) (sort (._. varLog name)))
+  (native-var name))
+
+(begin
+  ;; test _shell
+  (define VFOO &native 1)
+  (define VBAR &native 2)
+  (expect "1" (_var "VFOO"))
+  (expect "2" (_var "VBAR"))
+  (expect "VBAR VFOO" varLog))
+
+
+(export (native-name _wildcard) 1)
+(export (native-name _shell) 1)
+(export (native-name _var) 1)
 
 
 ;; Return the variable portion of indirection ID.  Return nil if the ID ends

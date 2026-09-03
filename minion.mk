@@ -1,5 +1,7 @@
 # minion.mk
 
+_minionStartVars := $(.VARIABLES)
+
 # User Classes
 #
 # The following classes may be overridden by user makefiles.  Minion
@@ -56,6 +58,7 @@ minionStart ?=
 [ := (
 ] := )
 ; := ,
+\q = "#"
 define \n
 
 
@@ -455,7 +458,7 @@ _cacheGroupSize ?= 40
 #--------------------------------
 
 define _helpMessage
-Minion v1.1b1 usage:
+Minion v1.0b2 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
@@ -588,19 +591,23 @@ define _epilogue
     _goalIDs := $(foreach g,$(MAKECMDGOALS),$(call _buildGoalID,$g))
   endif
 
-  ifeq "" "$(strip $(call get,needs,$(filter-out _CleanGoal$[%,$(_goalIDs))))"
-    # Trivial goals do not benefit from a cache.  Importantly, avoid the
-    # cache when handling `help` (targets may conflict with cache file) or
-    # `clean` (so we can recover from a corrupted cache file).
-  else ifdef minionCache
-    # Use a rule cache file. Note that recipe expansion is costly, so we
-    # perform it when-and-if the cache file needs to be freshened.
+  ifndef minionCache
+    # No caching selected by Makefile
+  else ifeq "" "$(strip $(call get,needs,$(filter-out _CleanGoal$[%,$(_goalIDs))))"
+    # Avoid cache: Trivial goals do not benefit, and importantly, we avoid
+    # the cache when handling `help` (goals may conflict with cached rules,
+    # because they take on a new meaning) or `clean` (so we can recover from
+    # a corrupted cache file).
+  else ifneq "" "$(filter c%,$(foreach v,$(_minionStartVars),$(origin $v)))"
+    # Avoid cache: a command-line override was used
+  else
+    # Use a rule cache file. Recipe expansion is costly, so defer it to rule
+    # processing time, only when-and-if the cache needs to be built.
     $(VOUTDIR)cache.mk : $(MAKEFILE_LIST) ; $(call _rulecacheRecipe,$@)
     -include $(VOUTDIR)cache.mk
-    # If the rule cache does NOT exist then Make will immediately restart
-    # after this parse phase.  In this case, _cachedIDs will be unset and
-    # the following line will avoid the wasted time of rule generation by
-    # indicating all rules are cached.
+    # The following line only has an effect when the rule cache does not
+    # exist yet.  In that case, it avoids rule generation, because we know
+    # Make will immediately restart, and that would be wasted work.
     _cachedIDs ?= %
   endif
 
@@ -621,6 +628,8 @@ _isGoal = $(or $(_isInstance),$(_isIndirect),$(_isAlias))
 _buildGoalID = $(if $(or $(_isInstance),$(_isIndirect)),_BuildGoal($1),$(_isAlias))
 _set = $(eval $$1 := $$2)$2
 _wildcard = $(if $(call _set,'globLog,$(sort $('globLog) $1)),)$(wildcard $1)
+_shell = $(if $(call _set,'shellLog,$(sort $('shellLog) $(subst $(\s),!0,$(subst !,!1,$1)))),)$(shell $1)
+_var = $(if $(call _set,'varLog,$(sort $('varLog) $1)),)$($1)
 _ivar = $(filter-out %@,$(subst @,@ ,$1))
 _EI = $(call _error,$(if $(filter %@,$1),Invalid target (ends in '@'): $1,Indirection '$1' references undefined variable '$(_ivar)')$(if $2,$(\n)Found while expanding $(if $(filter _BuildGoal$[%,$2),command line goal,$2)))
 _expandX = $(foreach w,$1,$(if $(call _isIndirect,$w),$(foreach x,$(or $(call _ivar,$w),=@),$(patsubst %,$(if $(filter @%,$w),%,$(subst $(\s),,$(filter %( %% ),$(subst @,$[ ,$w) % $(subst @, $] ,$w)))),$(if $(findstring *,$x),$(call _wildcard,$x),$(if $(filter u%,$(flavor $x)),$(call _EI,$w,$2),$(call _expandX,$($x),$x))))),$w))
@@ -671,9 +680,11 @@ _graphDeps = $(call _graph,$1,$2,$3,$(call _traverse,$1,$3,$4))
 _uniqQ = $(if $1,$(word 1,$1)   $(call _uniqQ,$(filter-out $(word 1,$1),$1)))
 _unique = $(filter %,$(subst ^c,^,$(subst ^p,%,$(call _uniqQ,$(subst %,^p,$(subst ^,^c,$1))))))
 _goalsToIDs = $(call _expand,$(foreach w,$1,$(or $(call _isGoal,$w),$(error $2 contains unknown goal '$w'))),$2)
-_rulecacheRecipe = $(info Updating Minion cache...)$(call _rcr2,$1,minionCache,minionNoCache,$(_cacheGroupSize))
-_rcr2 = $(call _rcr3,$1,$(filter-out $(filter %$],$(call _goalsToIDs,$(minionNoCache),minionNoCache)),$(call _rollup,$(call _goalsToIDs,$(minionCache),minionCache))),$(filter %$],$(call _goalsToIDs,$(minionNoCache),minionNoCache)),$4)
-_rcr3 = @mkdir -p $(dir $1)$(\n)@echo '_cachedIDs = $2' > $1_tmp_$(\n)$(foreach w,$(call _group,$2,$4),@$(call _printf,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)_$x_needs = $(filter $3,$(call _depsOf,$x)))$(\n))) >> $1_tmp_$(\n))$(if $('globLog),@$(call _printf,$(\n)ifneq ($(wildcard $('globLog)),$$(wildcard $('globLog)))$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)) >> $1_tmp_$(\n))@mv $1_tmp_ $1$(\n)
+_rulecacheRecipe = $(info Updating Minion cache...)$(call _rcr2,$1,$(call _rollup,$(call _varToIDs,minionCache)),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
+_rcr2 = @mkdir -p $(dir $1)$(\n)@> $1_tmp_$(\n)$(foreach w,$(call _group,$(filter-out $3,$2),$4),@$(call _printf,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)_$x_needs = $(filter $3,$(call _depsOf,$x)))$(\n))) >> $1_tmp_$(\n))@$(call _printf,_cachedIDs = $(filter-out $3,$2)$(\n)$(foreach w,minionCache minionNoCache $('varLog),$(call _checkValue,$1,$($w),$$($w)))$(if $('globLog),$(call _checkValue,$1,$(wildcard $('globLog)),$$(wildcard $('globLog))))$(foreach w,$('shellLog),$(call _checkValue,$1,$(shell $(subst !1,!,$(subst !0, ,$w))),$$(shell $(subst !1,!,$(subst !0, ,$w)))))) >> $1_tmp_$(\n)@mv $1_tmp_ $1$(\n)
+_varToIDs = $(call _goalsToIDs,$($1),$1)
+_checkValue = $(\n)ifneq "$(call _qesc,$2)" "$3"$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)
+_qesc = $(subst $(\n),$$($(\n)),$(subst \#,$$(\H),$(subst ",$$(\q),$(subst $$,$$$$,$1))))
 
 # outputs.scm
 
