@@ -17,7 +17,7 @@ _words = $(if $(word $1,$2),$(wordlist 1,$1,$2),$(call _words,$1,$2 $2))
 
 # $(call _getXFunc,NREPS) -> name of XFunc (a function that evals $0_ NREPS times)
 _getXFunc = $(if $(filter u%,$(flavor _X$1)),$(eval _X$1 = $(_xfuncBody)))_X$1
-_xfuncBody = $(subst 1 ,$$(if $$($$0_),),$(wordlist 2,999999,$(call _words,$1,1)) )$$($$0_)
+_xfuncBody = $(subst x ,$$(if $$($$0_),),$(wordlist 2,999999,$(call _words,$1,x)) )$$($$0_)
 
 # Example:
 #   $(foreach f,$(call _getXFunc,5),$(info $f = $(value $f)))

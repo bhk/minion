@@ -261,10 +261,10 @@ just three properties:
 
  * `rule` : Make source code that defines a rule for the instance.
 
- * `needs`: a list of target IDs that generate rules that are prerequisites
-   of `rule`.
+ * `out`: the output file path or phony target named by the rule.
 
- * `out`: the resulting file path, or phony target name.
+ * `needs`: a list of instances whose rules are referenced by this
+   instance's rule.
 
 User-defined classes do not need to implement these directly.  Generally,
 they will benefit from inheriting from `Builder` and overriding properties
@@ -308,8 +308,31 @@ can customize behavior by defining the following:
 
 ### `{needs}`
 
-Builder's `{needs}` definition is computed from `{in}`, `{up}`, `{deps}`,
-and `{oo}`.
+The `{needs}` property lists all Minion instances that are prerequisites of
+the current instance.  To be precise, these are instances whose Make rules
+define targets that are prerequisites of the current instance's Make rule.
+
+Builder defines `{needs}` as the union of the following sets:
+
+ - {in}: Dependencies whose output files will appear in `{^}`.  This
+   typically is used for files that will appear on the command line
+   as arguments.
+
+ - {up}: Dependencies whose output files will appear in `{up^}`.  This is
+   typically used for files that will appear on the command line as an
+   invoked command or within a special option passed to the command.
+
+ - {oo}: Out-of-order dependencies.  These generally do not appear on the
+   command line.
+
+ - {deps}: Other dependencies for which it would be more convenient to
+   exclude from the above categories.
+
+These definitions are necessarily a bit general and abstract, since we are
+talking about a base class.  Concrete derived classes will have more
+concrete guidelines.  Ultimately this is determined by how the {rule}
+property for that class uses them, which for the most part is customized
+using the {command} property.
 
 ### `{out}` and related properties
 
@@ -379,12 +402,12 @@ make use of the following property references:
 These properties correspond to Make's "automatic variables" `$@`, `$<`, and
 `$^`, which are unavailable in Minion property definitions, since command
 expansion happens prior to the rule processing phase.  The value of `{^}` is
-not identical to Make's `$^`, but it is more often what is relevant to rule
-construction: it is a list of the files that correspond to target IDs in
-{in}, and it does not include {deps}, {oo}, or implicit dependencies
-(declared as prerequisited via {depsFile}), or other files that would not
-normally appear as command line arguments.  Also, duplicate entries are not
-pruned, so in that respect it is more like `$+` than `$^`.
+not identical to Make's `$^`, but it is more useful for rule construction:
+it is a list of the files that correspond to target IDs in {in}, and it does
+not include {deps}, {oo}, or implicit dependencies (declared as
+prerequisited via {depsFile}), or other files that would not normally appear
+as command line arguments.  Also, duplicate entries are not pruned, so in
+that respect it is more like `$+` than `$^`.
 
 For example, the `Copy` class inherits this definition of `command`:
 
@@ -392,10 +415,12 @@ For example, the `Copy` class inherits this definition of `command`:
 
 ### `{in}`
 
-The value of `{in}` is an [ingredient list](#ingredients) that describes
-prerequisites of this instance.  Builder defines `{in}` as `$(_args)`, which
-defaults to all unnamed instance arguments.  Other classes may define `{in}`
-differently.
+The value of `{in}` is an [ingredient list](#ingredients) containing
+prerequisites that are explicit inputs to the build step, typically
+appearing on the command line as arguments.
+
+The default value supplied by `Builder.in`, is `$(_args)`: all unnamed
+instance arguments.  Other classes define `{in}` differently.
 
 Expansion of [indirections](#indirections) and [inference](#inferClasses) of
 intermediate targets is performed to generate `{inIDs}`, which is a list of
@@ -466,17 +491,14 @@ might look something like this:
 
 ### `{deps}`
 
-This property lists dependencies that are but are not listed on the command
-line and are not inherent in the class.
-
-One use case for `{deps}` is when there are implicit dependencies that are
-not automatically detected.  Users can manually express these using
-`{deps}`.
+This property lists dependencies that are not order-only, and whose output
+files do not appear in `{^}` or `{up^}`.
 
 One example of this is ordering of unit tests.  For example, we might want
 to execute test A before test B because A *validates* some of the code
-relied upon by test B.  Running B before A might waste the user's time.
-Automatic detection of these kinds of dependencies might not be avialable.
+relied upon by test B.  Changing A will not change the output of B, to it is
+not a strict dependency, but running B before A might waste the user's time
+and result in more confusing build results.
 
 ### `{inferClasses}`
 

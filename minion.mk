@@ -77,7 +77,8 @@ endef
 #     {command} and/or {in} may be overridden by the user makefile.
 #
 _Alias.inherit = _Goal
-_Alias.in = $($(_argText))
+_Alias.in =
+_Alias.deps = $($(_argText))
 
 
 # _Clean(INSTANCE) : Clean INSTANCE and its direct & indirect depedencies.
@@ -303,9 +304,7 @@ _Builder.@ = {out}
 _Builder.< = $(firstword {^})
 _Builder.^ = $(call get,out,{inIDs})
 
-# Diagnose someone accidentally using "$@" instead of "{@}".  Cache file
-# generation requires {rule} evaluation during rule processing, which will
-# break if property definitions use "$@", "$<", etc.
+# Diagnose someone accidentally using "$@" instead of "{@}".
 @ = $(call _badAuto,@,$0)
 < = $(call _badAuto,<,$0)
 ^ = $(call _badAuto,^,$0)
@@ -458,7 +457,7 @@ _cacheGroupSize ?= 40
 #--------------------------------
 
 define _helpMessage
-Minion v1.0b2 usage:
+Minion v1.0b3 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
