@@ -4,11 +4,12 @@ default = #nothing
 MINION ?= minion.mk
 include $(MINION)
 
-true = $(if $1,1)
-not = $(if $1,,1)
 
 # $(call _expectEQ,A,B): error (with diagnostics) if A is not the same as B
+#
 _expectEQ = $(if $(call _eq?,$1,$2),,$(error Values differ:$(\n)A: $(_qv)$(\n)B: $(call _qv,$2)$(\n)))
+true = $(if $1,1)
+not = $(if $1,,1)
 
 
 # _eq?
@@ -121,10 +122,9 @@ $(call _expectEQ,\
 
 # _buildGoalID
 
-Alias(alias1).in = x
+alias1 = x
+alias2 =
 Alias(alias2).command = y
-Alias(alias3).in = x3
-Alias(alias3).command = y3
 
 _aliases := alias1 alias2
 $(call _expectEQ,$(call _buildGoalID,alias1),Alias(alias1))

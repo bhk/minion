@@ -46,13 +46,13 @@ gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .o
 ```console
 $ make 'CExe(CC(hello.c))'
 #-> CExe(CC(hello.c))
-gcc -o .out/CExe.o_CC.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.o_CC.c/hello .out/CC.c/hello.o
 
 ```
 ```console
 $ make 'Run(CExe(CC(hello.c)))'
 #-> Run(CExe(CC(hello.c)))
-.out/CExe.o_CC.c/hello  
+.out/CExe.o_CC.c/hello
 Hello world.
 
 ```
@@ -68,7 +68,7 @@ intermediate ".o" artifact.
 ```console
 $ make 'CExe(hello.c)'
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 
 ```
 
@@ -87,7 +87,7 @@ rm -rf .out/
 #-> CC(hello.c)
 gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 
 ```
 
@@ -100,9 +100,9 @@ rm -rf .out/
 #-> CC(hello.c)
 gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 #-> Run(hello.c)
-.out/CExe.c/hello  
+.out/CExe.c/hello
 Hello world.
 
 ```
@@ -120,7 +120,7 @@ a goal, and so on.
 ```console
 $ make 'Run(hello.c)'
 #-> Run(hello.c)
-.out/CExe.c/hello  
+.out/CExe.c/hello
 Hello world.
 
 ```
@@ -169,12 +169,12 @@ Run(hello.c) is an instance.
 
 {out} = .out/Run.c/hello.out
 
-Command:  .out/CExe.c/hello  
+Command:  .out/CExe.c/hello
 
-Direct dependencies: 
+Direct dependencies:
    CExe(hello.c)
 
-Indirect dependencies: 
+Indirect dependencies:
    CC(hello.c)
 
 
@@ -187,10 +187,10 @@ Exec(hello.c) is an instance.
 
 Command: (  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
 
-Direct dependencies: 
+Direct dependencies:
    CExe(hello.c)
 
-Indirect dependencies: 
+Indirect dependencies:
    CC(hello.c)
 
 
@@ -210,7 +210,7 @@ $ make 'CExe(@sources)' sources='hello.c empty.c'
 #-> CC(empty.c)
 gcc -c -o .out/CC.c/empty.o empty.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/empty.c.d
 #-> CExe(@sources)
-gcc -o .out/CExe_@/sources .out/CC.c/hello.o .out/CC.c/empty.o 
+gcc -o .out/CExe_@/sources .out/CC.c/hello.o .out/CC.c/empty.o
 
 ```
 
@@ -224,7 +224,7 @@ $ make help Run@sources sources='hello.c binsort.c'
 
    sources = hello.c binsort.c
 
-It expands to the following targets: 
+It expands to the following targets:
    Run(hello.c)
    Run(binsort.c)
 
@@ -233,14 +233,14 @@ It expands to the following targets:
 ```console
 $ make Run@sources sources='hello.c binsort.c'
 #-> Run(hello.c)
-.out/CExe.c/hello  
+.out/CExe.c/hello
 Hello world.
 #-> CC(binsort.c)
 gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o 
+gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o
 #-> Run(binsort.c)
-.out/CExe.c/binsort  
+.out/CExe.c/binsort
 srch(7) = 5
 srch(6) = 9
 srch(12) = 9
@@ -258,7 +258,7 @@ $ make help 'Run@*.c'
 
    *.c
 
-It expands to the following targets: 
+It expands to the following targets:
    Run(binsort.c)
    Run(empty.c)
    Run(hello.c)
@@ -344,7 +344,7 @@ $ make 'CC(hello.c).objFlags=-Os'
 #-> CC(hello.c)
 gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o 
+gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 #-> Exec(hello.c)
 (  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
 
@@ -364,7 +364,7 @@ $ make CC.objFlags=-Os
 #-> CC(binsort.c)
 gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o 
+gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o
 #-> Exec(binsort.c)
 (  .out/CExe.c/binsort   ) > .out/Exec.c/binsort.out || ( rm -f .out/Exec.c/binsort.out; false )
 
@@ -564,13 +564,13 @@ supported.  Instead, define your own sub-classes.
 $ cp Makefile3 Makefile; diff Makefile2 Makefile3
 5a6,13
 > CC.langFlags = {inherit} -Wextra
-> 
+>
 > CCg.inherit = CC
 > CCg.objFlags = -g
-> 
+>
 > Sizes.inherit = Run
 > Sizes.command = wc -c {^}
-> 
+>
 
 ```
 
@@ -674,9 +674,9 @@ $ cp Makefile4 Makefile
 $ cat Makefile
 Variants.all = debug fast small
 
+default = sizes
 sizes = Sizes(CExe@sources)
 all-sizes = Variants(Alias(sizes))
-default = Alias(sizes)
 
 sources = hello.c binsort.c
 
@@ -720,11 +720,11 @@ $ make sizes           # sizes for the default (first) variant "debug"
 #-> CC(hello.c)
 gcc -c -o .out/debug/CC.c/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/debug/CExe.c/hello .out/debug/CC.c/hello.o 
+gcc -o .out/debug/CExe.c/hello .out/debug/CC.c/hello.o
 #-> CC(binsort.c)
 gcc -c -o .out/debug/CC.c/binsort.o binsort.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/debug/CExe.c/binsort .out/debug/CC.c/binsort.o 
+gcc -o .out/debug/CExe.c/binsort .out/debug/CC.c/binsort.o
 #-> Sizes(CExe@sources)
 wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
    33656 .out/debug/CExe.c/hello
@@ -737,11 +737,11 @@ $ make sizes V=fast    # sizes for the "fast" variant
 #-> CC(hello.c)
 gcc -c -o .out/fast/CC.c/hello.o hello.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/fast/CExe.c/hello .out/fast/CC.c/hello.o 
+gcc -o .out/fast/CExe.c/hello .out/fast/CC.c/hello.o
 #-> CC(binsort.c)
 gcc -c -o .out/fast/CC.c/binsort.o binsort.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/fast/CExe.c/binsort .out/fast/CC.c/binsort.o 
+gcc -o .out/fast/CExe.c/binsort .out/fast/CC.c/binsort.o
 #-> Sizes(CExe@sources)
 wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
    33432 .out/fast/CExe.c/hello
@@ -764,11 +764,11 @@ wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
 #-> CC(hello.c)
 gcc -c -o .out/small/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/hello.c.d
 #-> CExe(hello.c)
-gcc -o .out/small/CExe.c/hello .out/small/CC.c/hello.o 
+gcc -o .out/small/CExe.c/hello .out/small/CC.c/hello.o
 #-> CC(binsort.c)
 gcc -c -o .out/small/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/binsort.c.d
 #-> CExe(binsort.c)
-gcc -o .out/small/CExe.c/binsort .out/small/CC.c/binsort.o 
+gcc -o .out/small/CExe.c/binsort .out/small/CC.c/binsort.o
 #-> Sizes(CExe@sources)
 wc -c .out/small/CExe.c/hello .out/small/CExe.c/binsort
    33432 .out/small/CExe.c/hello
@@ -806,4 +806,3 @@ To summarize the key concepts in Minion:
    default variant first.  Use `make V=VARIANT TARGET` to build a specific
    variant of a target, and use `make 'Variants(TARGET)'` to build all
    variants of a target.
-

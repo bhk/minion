@@ -170,7 +170,6 @@ var-test:
 #   * `a\=b` escapes "a=b" in prereq; NOT in target.
 #
 
-
 .PHONY: minion.md
 
 m*d: ; @echo 'A: $$@ = "$@"'
@@ -195,3 +194,42 @@ wc7: a\b ; @echo '$$@ = "$@";  $$^ = "$^"'
 wc8: a\#b ; @echo '$$@ = "$@";  $$^ = "$^"'
 wc9: a\:b ; @echo '$$@ = "$@";  $$^ = "$^"'
 wc10: a\=b ; @echo '$$@ = "$@";  $$^ = "$^"'
+
+
+#
+# Examine escaping of characters in `ifeq`, etc.
+#
+
+\s := $(if ,, )
+\t := $(if ,,	)
+\H := \#
+[ := (
+] := )
+\q = "#"
+define \n
+
+
+endef
+
+
+# Funny encoding of backslashes that precede # !
+W := a\$(\H)\\$(\H)\\\$(\H)
+ifneq ($W,a\\\#\\\\\#\\\\\\\#)
+  $(error FAILURE)
+endif
+
+V := $(\s)$(\t)\a\\b,$(\n)"c))(d\#e"
+
+# Parenthesis encoding: needs to escape leading spaces, $, parens, #, \n
+#  
+ifneq ($V,  $(\s)	\a\\b,$(\n)"c$]$]$[d\#e")
+  $(error FAILURE)
+endif
+
+# Double-quote encoding: need to escape $, ", #, \n
+#
+ifneq "$V" " 	\a\\b,$(\n)$(\q)c))(d\#e$(\q)"
+  $(error FAIL)
+endif
+
+

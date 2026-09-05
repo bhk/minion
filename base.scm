@@ -26,11 +26,6 @@
 (set-native "]]" "}")
 
 
-(define `(isInstance target)
-  &public
-  (filter "%)" target))
-
-
 ;; Defined in objects.scm: _self, _class
 
 ;; Dynamic state during property evaluation enables `.`, `C`, and `A`:
@@ -90,10 +85,14 @@
 ;; This function does not perform a deep validation of the instance syntax,
 ;; but it discriminates them from valid indirections, aliases, or file names.
 ;;
+(define `(isInstance id)
+  &public
+  (filter "%)" id))
+
 (define (_isInstance id)
   &public
   &native
-  (filter "%)" id))
+  (isInstance id))
 
 (export (native-name _isInstance) 1)
 
@@ -110,28 +109,21 @@
 (export (native-name _isIndirect) 1)
 
 
+
 ;; Return alias instance if goal NAME is an alias.
 ;;
+(define `(isAlias id)
+  ;; Only allow makefile-defined variables to minimize potential for
+  ;; confusion with environment and make defaults (e.g. LINT.c !)
+  (if (filter "f% o%" (native-origin id))
+      (.. "Alias(" id ")")))
+
 (define (_isAlias name)
   &native
-  (if (filter "s% r%" (._. (native-flavor name)
-                           (native-flavor (.. "Alias(" name ").in"))
-                           (native-flavor (.. "Alias(" name ").command"))))
-      (.. "Alias(" name ")")))
+  (isAlias name))
+
 
 (export (native-name _isAlias) 1)
-
-
-;; If NAME is a goal return its instance ID form; otherwise empty.
-;;
-(define (_isGoal name)
-  &native
-  &public
-  (or (_isInstance name)
-      (_isIndirect name)
-      (_isAlias name)))
-
-(export (native-name _isGoal) 1)
 
 
 ;; If goal NAME is a Minion goal (alias, instance, or indirection), then
@@ -280,7 +272,7 @@
 (export (native-name _EI) 1)
 
 
-;; WHERE = C(A).P or variable name
+;; WHERE = where LIST came from, e.g. "C(A).P or variable name
 ;;
 (define (_expandX list where)
   &native
@@ -303,23 +295,25 @@
                        (.. (subst "@" "( " ref) " % " (subst "@" " ) " ref))))))
 
   (foreach (w list)
-    (if (_isIndirect w)
-        (foreach (v (or (_ivar w) "=@"))
-          (patsubst "%" (ipat w) (expand v w)))
-        w)))
+    (or (isInstance w)
+        ;; after ruling out instances, "@" means indirection
+        (if (findstring "@" w)
+            (foreach (v (or (_ivar w) "=@"))
+              (patsubst "%" (ipat w) (expand v w)))
+            (or (isAlias w)
+                w)))))
 
 (export (native-name _expandX) nil)
 
 
-;; Expand indirections in LIST
+;; Expand indirections in LIST, and translate bare alias names to instances.
+;;
 ;; PROP is used in reporting "Found while expanding C(A).PROP" errors
 ;;
 (define (_expand list ?prop)
   &native
   &public
-  (if (findstring "@" list)
-      (_expandX list (.. _self "." prop))
-      list))
+  (_expandX list (.. _self "." prop)))
 
 (export (native-name _expand) nil)
 

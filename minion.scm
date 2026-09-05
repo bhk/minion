@@ -1,5 +1,5 @@
 ;;----------------------------------------------------------------
-;; prototype.scm:  SCAM prototypes of functions for Minion
+;; minion.scm: Generate makefile definitions from SCAM definitions
 ;;----------------------------------------------------------------
 
 (require "io")

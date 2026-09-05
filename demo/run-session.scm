@@ -41,6 +41,16 @@
 ;;
 (define *was-mod* nil)
 
+
+;; Enforce whitespace discipline for version control purposes
+(define (trim-spaces text)
+  (if (findstring " \n" text)
+      (trim-spaces (subst " \n" "\n" text))
+      (if (findstring "\n\n<END>" (.. text "<END>"))
+          (trim-spaces (subst "\n<END>" "" (.. text "<END>")))
+          text)))
+
+
 (define (delay-for-make command)
   (define `is-make
     (and (filter "make" command)
@@ -86,7 +96,7 @@
       (cond
        ((not infile) "no input file given")
        ((not outfile) "no output file given")
-       (else (write-file outfile (run infile)))))
+       (else (write-file outfile (trim-spaces (run infile))))))
 
     (when err-msg
       (fprintf 2 "run-session: %s\n" err-msg)

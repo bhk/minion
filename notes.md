@@ -1,5 +1,17 @@
 # Notes
 
+## Minion Todo
+
+ - Aliases in ingredient lists
+
+ - {inherit NAME} : Similar to {inherit}, but it looks up the inherited
+   definition of a different property, not the one currently being
+   evaluated.  Just checking for this case might slightly slow down property
+   definition compilation.
+
+ - `make 'C(A).P'` : Compute and output property, like `make help 'C(A).P'`
+   but without any extraneous text.
+
 ## Design Notes
 
 ### How Minion Works
@@ -180,31 +192,24 @@ echo to stdout) or Prop(C(A).P) (to write to file).
 
 ### Aliases in Target Lists
 
-Aliases are currently excluded from ingredient lists, which can lead to some
-confusion.
+Aliases are currently excluded from {in}, {up}, {deps}.
 
 There is a potential ambiguity between "alias name" and "file name", but
 that already exists in Make's goal processing, and with Minion only *source*
 file names will appear in ingredient lists.
 
-An easy alternative to naming an alias would be "@alias", which would cover
-the cases of command-less aliases.
-
 To summarize:
 
-    goals, cache         PLAIN | C(A) | *VAR | ALIAS   (user-facing)
-    in, up, oo           PLAIN | C(A) | *VAR           (user-facing)
-    get, needs, rollup   PLAIN | C(A)
-    out, <, ^, up^       PLAIN                         (user-facing)
+    goals, cache, oo     PLAIN | C(A) | *VAR | ALIAS
+    in, up               PLAIN | C(A) | *VAR
+    get, needs, rollup   PLAIN | C(A)                  (non-user-facing)
+    out, <, ^, up^       PLAIN
 
 The following change would simplify documentation:
 
-    goals, cache, in, ...  PLAIN | C(A) | *VAR | ALIAS   (user-facing)
-    get, needs, rollup     PLAIN | C(A)
-    out, <, ^, up^         PLAIN                         (user-facing)
-
-[If we were to include ALIAS values in the middle category, then we have
-the problem of duplicates due to, uh, "aliasing" of Alias(X) and X.]
+    goals, cache, oo, in, up, deps  PLAIN | C(A) | *VAR | ALIAS
+    get, needs, rollup              PLAIN | C(A)        (non-user-facing)
+    out, <, ^, up^                  PLAIN
 
 This involves only a change to `_expand`, which is called many times, and on
 occasions when order must be preserved, so performance is a concern.  Some
@@ -333,7 +338,7 @@ In Minion, we can define the the follwing class:
 The default target of the top-level make will be a sub-make that builds the
 final results of the project:
 
-    Alias(default).in = Submake(product)
+    default = Submake(product)
 
 Dependencies between sub-makes must be expressed in the top level makefile
 like this:
@@ -347,11 +352,11 @@ for the current component without updating external dependencies.  We can
 add the following line to a component makefile so that `make outer` will
 build all its dependencies and then build its default goal:
 
-    Alias(outer).in = Submake(../Makefile,goal:Submake(DIR1))
+    outer = Submake(../Makefile,goal:Submake(DIR1))
 
-...or...
+where its command is something like:
 
-    Alias(outer).command = make -C ../Makefile 'Submake(DIR1)'
+    make -C ../Makefile 'Submake(DIR1)'
 
 
 ### Flat projects
@@ -553,16 +558,3 @@ needed.  Whenever it needs data from the X domain it can expand, e.g.,
 As this data leads it to discover new rules that need to be brought into
 play, those in turn can employ their own included makefiles.  I've no doubt
 it would *work*, but performance-wise it would not scale nicely.
-
-
-## Minion Todo
-
- - Aliases in ingredient lists
-
- - {inherit NAME} : Similar to {inherit}, but it looks up the inherited
-   definition of a different property, not the one currently being
-   evaluated.  Just checking for this case might slightly slow down property
-   definition compilation.
-
- - `make 'C(A).P'` : Compute and output property, like `make help 'C(A).P'`
-   but without any extraneous text.

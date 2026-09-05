@@ -426,7 +426,18 @@
 (declare (_printf text) &native &public)
 
 
-;; Translate a list of goals into IDs
+;; If NAME is a goal return its instance ID form; otherwise empty.
+;;
+(define `(_isGoal name)
+  &native
+  (or (_isInstance name)
+      (_isIndirect name)
+      (_isAlias name)))
+
+
+;; Translate a list of target into IDs, and warn when an non-instance ID
+;; is present.
+;;
 (define (_goalsToIDs goals where)
   &native
   (_expand (foreach (g goals)

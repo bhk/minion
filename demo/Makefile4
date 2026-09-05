@@ -1,8 +1,8 @@
 Variants.all = debug fast small
 
+default = sizes
 sizes = Sizes(CExe@sources)
 all-sizes = Variants(Alias(sizes))
-default = Alias(sizes)
 
 sources = hello.c binsort.c
 
