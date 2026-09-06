@@ -109,8 +109,7 @@
 (export (native-name _isIndirect) 1)
 
 
-
-;; Return alias instance if goal NAME is an alias.
+;; Return the alias instance if NAME is a variable name.
 ;;
 (define `(isAlias id)
   ;; Only allow makefile-defined variables to minimize potential for

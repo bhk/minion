@@ -20,20 +20,15 @@ include ../minion.mk
 ```
 
 This makefile doesn't describe anything to be built, but it does invoke
-Minion, so when we type `make` in this directory, Minion will process the
-goals.  A *goal* is a target name that is listed on the command line.  Goals
-determine what Make actually does when it is invoked.
+Minion so we can explore its capabilities.
 
 
 ## Instances
 
-The salient feature of Minion is instances.  An instance is a description of
-a build step.  Instances can be provided as goals or as inputs to other
-build steps.
-
-An instance is written `CLASS(ARGS)`.  `ARGS` is a comma-delimited list of
-arguments, each of which is typically the name of an input to the build
-step.  `CLASS` is the name of a class that is defined by Minion or your
+The salient feature of Minion is instances, which describe how to build
+files.  An instance is written `CLASS(ARGS)`.  `ARGS` is a comma-delimited
+list of arguments, each of which is typically the name of an input to the
+build action.  `CLASS` is the name of a *class* defined by Minion or your
 makefile.  To get started, let's use some classes that are built into
 Minion:
 
@@ -57,13 +52,18 @@ Hello world.
 
 ```
 
+The quoting necessary for the shell may seem cumbersome, but this is not a
+typical workflow.  Minion accepts instances as command line arguments in
+order to enable a lightweight, interactive way to explore and illustrate
+its functionality.
+
 
 ## Inference
 
 Some classes have the ability to *infer* intermediate build steps, based on
-the extension of the input file (or files).  For example, if we provide a
-".c" file as an argument to `CExe`, it knows how to generate the
-intermediate ".o" artifact.
+the extension of the input file (or files).  The `CExe` class is one of
+these.  If we provide a ".c" file as an argument to `CExe`, it knows how to
+generate the intermediate ".o" artifact, using `CC`.
 
 ```console
 $ make 'CExe(hello.c)'
@@ -76,31 +76,11 @@ This command linked the program, but did not rebuild `hello.o`.  This is
 because we have already built the inferred dependency, `CC(hello.c)`.  Doing
 nothing, whenever possible, is what a build system is all about.
 
-We can demonstrate that everything will get re-built, if necessary, by
-re-issuing this command after invoking `make clean`.  The `clean` target is
-defined by Minion, and it removes the "output directory", which, by default,
-contains all generated artifacts.
-
-```console
-$ make clean; make 'CExe(hello.c)'
-rm -rf .out/
-#-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
-#-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o
-
-```
-
 Likewise, `Run` can also infer a `CExe` instance (which in turn will infer
 a `CC` instance):
 
 ```console
-$ make clean; make 'Run(hello.c)'
-rm -rf .out/
-#-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
-#-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o
+$ make 'Run(hello.c)'
 #-> Run(hello.c)
 .out/CExe.c/hello
 Hello world.
@@ -160,8 +140,8 @@ Hello world.
 
 When the goal `help` appears on the command line, Minion will describe all
 of the other goals on the command line, instead of building them.  This
-gives us visibility into how things are being interpreted, and how they map
-to underlying Make primitives.
+gives us visibility into how things are being interpreted by Minion, and how
+they map to underlying Make primitives.
 
 ```console
 $ make help 'Run(hello.c)'
@@ -199,11 +179,10 @@ Indirect dependencies:
 
 ## Indirections
 
-An *indirection* is a way of referencing a group of files.  These can be
-used in contexts where input files or prerequisites are specified for Minion
-instances.  There are two forms of indirections.  The first is called a
-simple indirection, written `@GROUP`, and it expands to the words in the
-group:
+An *indirection* is a way of referencing variables that contain groups of
+files.  These can be used in contexts where input files or prerequisites are
+specified for Minion instances.  The simplest form, a variable indirection,
+expands to the words in the value of the named variable:
 
 ```console
 $ make 'CExe(@sources)' sources='hello.c empty.c'
@@ -214,9 +193,20 @@ gcc -o .out/CExe_@/sources .out/CC.c/hello.o .out/CC.c/empty.o
 
 ```
 
-The other form is called a mapped indirection, written `CLASS@GROUP`.  This
+Another form, a wildcard indirection, is distinguished by the presence of a
+`*` character:
+
+```console
+$ make 'CExe(@*e*.c)'
+#-> CExe(@*e*.c)
+gcc -o .out/CExe_@/@Se@S .out/CC.c/empty.o .out/CC.c/hello.o
+
+```
+
+The final form is called a mapped indirection, written `CLASS@GROUP`.  This
 references a set of instances which are obtained by applying the class to
-each word in the group.
+each word in GROUP, which can be a variable or wildcard or another mapped
+indirection.
 
 ```console
 $ make help Run@sources sources='hello.c binsort.c'
@@ -266,24 +256,14 @@ It expands to the following targets:
 
 ```
 
+
 ## Aliases
 
-So far we haven't added anything to our makefile, so we could only build
-things that we explicitly describe on the command line.  A build system
-should allow us to describe complex builds in a makefile so they can invoked
-with a simple command, like `make` or `make deploy`.  Minion provides
-*aliases* for this purpose.  An alias is a name that identifies a phony
-target instead of an actual file.
-
-To define an alias, do one of the following (or both):
-
-1. Define a variable named `Alias(NAME).in`.  The value you assign to it
-   will be treated as a list of targets to be built when NAME is given as a
-   goal.
-
-2. Define a variable named `Alias(NAME).command`.  The value you assign
-   to is will be treated as a command to be executed when NAME is given
-   as a goal.
+In a real project, our makefile would describe all of the important build
+steps in a makefile and associate them with simple names that can be
+specified on the Make command line.  Minion provides *aliases* for this
+purpose.  An alias is the name of a variable defined in your makefile that
+lists what is to be built.
 
 This next makefile defines aliases named "default" and "deploy":
 
@@ -310,8 +290,8 @@ cp .out/CExe.c/binsort .out/Copy/binsort
 
 ```
 
-If no goals are provided on the command line, Minion attempts to build the
-alias or target named `default`, so these commands do the same thing:
+If no goals are provided on the command line, Minion attempts to build
+`default`, so these commands do the same thing:
 
 ```console
 $ make
@@ -323,15 +303,6 @@ $ make
 $ make default
 
 ```
-
-One last note about aliases: alias names are just for use as goals on the
-Make command line.  Within a Minion makefile, when specifying targets we use
-only instances, source file names, or targets of Make rules.  So if you want
-to refer to one alias as a dependency of another alias, use its instance
-name: `Alias(NAME)`.  For example:
-
-    Alias(default).in = Alias(exes) Alias(tests)
-
 
 ## Properties and Customization
 
@@ -676,7 +647,7 @@ Variants.all = debug fast small
 
 default = sizes
 sizes = Sizes(CExe@sources)
-all-sizes = Variants(Alias(sizes))
+all-sizes = Variants(sizes)
 
 sources = hello.c binsort.c
 
@@ -786,13 +757,10 @@ To summarize the key concepts in Minion:
    be given as Make command line goals, and named as inputs to other
    instances.  They take the form `CLASS(ARGUMENTS)`.
 
- - *Indirections* are short names that identify groups of targets.  They can
-   be used as arguments to instances, or in the value of an `in` property,
-   or on the command line.
+ - *Indirections* are short names that identify collections of targets.
 
- - *Aliases* are short names that can be specified as goals on the command
-   line.  An alias can identify a set of other targets to be built, or a
-   command to be executed, or both.
+ - *Aliases* are variable names that can be specified as goals on the
+   command line.
 
  - *Properties* dictate how instances behave.  Properties definitions are
    associated with classes or instances, and classes may inherit property
@@ -801,6 +769,9 @@ To summarize the key concepts in Minion:
    to which they apply.  Property definitions can use Make variables and
    functions, and they can refer to other properties using the `{NAME}`
    syntax.
+
+ - Observabililty via `make help ...` is an important part of the Minion
+   experience.
 
  - To support multiple variants, list them in `Variants.all` putting the
    default variant first.  Use `make V=VARIANT TARGET` to build a specific

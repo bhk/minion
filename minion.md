@@ -12,9 +12,10 @@ When you invoke Make, Minion will treat the command-line arguments as a set
 of goals to be built.  Each goal may be one of the following:
 
   * An ordinary Make target
-  * A Minion [*instance*](#instances).
-  * A Minion [*indirection*](#indirections).
-  * A Minion [*alias*](#aliases).
+  * A Minion target:
+     * An [*instance*](#instances).
+     * An [*indirection*](#indirections).
+     * An [*alias*](#aliases).
 
 If you invoke Make without any arguments, Minion will build `default`, which
 your makefile may define using an *alias* (described below) or an ordinary
@@ -24,6 +25,9 @@ Make rule.
 ## Instances
 
 An **instance** is an expression that takes the form: `CLASS(ARGS)`.
+
+Instances may not contain space characters.  As in vanilla Make, lists are
+written as words separated by spaces.
 
 Instances describe things to be built.  For example, `CC(hello.c)` describes
 the build step of compiling `hello.c` to generate an object file.  Each
@@ -95,57 +99,94 @@ names, they result in distinct build steps, with distinct output files in
 separate locations.
 
 
+## The Object System
+
+At the core of Minion is a pure functional object-oriented language.
+
+Objects (instances) have properties, but no mutable state.  Given an
+instance name and a property name, Minion can compute the property value,
+and this value will depend only on the instance name and property and
+function definitions.
+
+Although Make's global variables *can* be modified at run time using `$(eval
+...`), this is not part of the Minion object model.  In fact, Minion
+assumes/requires that property definitions remain unchanged during
+execution.
+
+Since there is no mutable state, there is no notion of "creating" or
+"destroying" instances.  There is only the computing of values of properties
+for instances.  We cannot say whether an instance "exists" in a makefile or
+not ... but we can talk about whether it is *mentioned*, either in a
+makefile or on the command line.
+
+
 ## Classes
 
-The behavior of an instance is determined by a set of **properties** that are
-computed for the instance.  Property definitions are stored in Make variables
-whose names take the form `CLASS.PROPERTY` or `CLASS(ARGS).PROPERTY`, with
-the latter, instance-specific form taking precedence if both are defined.
+Property definitions are stored in Make variables.
 
-Each class can inherit definitions from other classes.  A variable named
-`CLASS.inherit`, if defined, is a space-delimited list of classes from which
-definitions will be inherited.  When Minion is computing a property, if it
-finds no definition for that property associated with its instance name or
-its class name, then it will look for a definition of that property
-associated with one of the inherited class names.  It examines them in
-order, using the first definition it finds.  An inherited class can, in
-turn, inherit from other classes.
+When evaluating a property `P` for `CLASS(ARGS)`, Minion will first look for
+an instance-level definitions, which would be stored in variable named
+`CLASS(ARGS).P`.  If that does not exist, it will look for a definition of P
+for `CLASS`; this would be in a variable named `CLASS.P`.  If that does not
+exist, it will examine the classes from which `CLASS` *inherits* property
+definitions.
 
-The values associated with definitions can, as with ordinary Make variables,
-use `$(...)` to substitute Make variables and call functions.  However, they
-may not use `${...}`, because `{` and `}` are reserved for Minion-specific
-functionality.  Expressions of the form `{...}` expand to the value of the
-property named by `...`.  The string `{inherit}` expands to the inherited
-value of the property currently being evaluated -- the value it *would have*
-taken on if the current definition had not been present.  To include an
-actual `{` or `}` character in a property definition, use `$([[)` or
-`$(]])`.
+A variable named `CLASS.inherit`, if defined, lists the classes from which
+CLASS inherits.  An inherited class can, in turn, inherit from other
+classes.
 
-While a property definition is being expanded, various [functions and
-variables exported by Minion](#exported-definitions) are available for use.
-These can be used directly within a property definition, or within a
-function or variable that is referenced by a property definition.
+If the end of the inheritance chain is reached before a definition is found,
+an error is reported and Make is exited.
+
+[Note that `CLASS.inherit`, while it looks like the definition of a property
+named "inherit", is not a property definition.  The name "inherit" cannot be
+used as a property name.]
+
+
+## Property Syntax
+
+GNU Make supports two "flavors" of variables, "simple" (using `:=`) and
+"recursive" (using `=`).  Properties *may* be defined using simple
+assignments, in which case the assigned values are expanded when that line
+in the makefile is first processed by Make, and not again.  These cannot
+avail themselves of the Minion features described below.  We recommend to
+avoid simple assignments in property definitions for syntactic consistency
+across your makefile.
+
+Recursive property definitions can, as with ordinary Make syntax, use
+`$(...)` expressions to substitute Make variables and call functions.  They
+may also use a Minion syntax, `{WORD}` to refer to other properties of the
+current instance.  To avoid confusion, Make's alternative `${...}` syntax
+for variable and function expansion is not supported within recursive
+property definitions.  To include an actual `{` or `}` character, use
+`$([[)` or `$(]])`.
+
+`{WORD}` refers to the property named by `WORD`.  When this expression is
+expanded, it will be replaced by the value of that property computed for the
+*current* instance.
+
+`{inherit}` is a special case; it expands to the inherited value of the
+*current* property -- in other words, the value the property would have
+taken on if this current definition had not been present.  This allows a
+subclass to modify, not simply replace, the value inherited from its base
+class.  For example:
+
+    MyCC.flags = {inherit} -fwrapv
+
+Property definitions can make use of various [functions and variables
+exported by Minion](#exported-definitions), because property evaluation
+only takes place after all the `minion.mk` definitions have been processed.
+
+When a property definition expands uses `$(VAR)` or `$(call VAR)`,
+expressions within that referenced variable can make use of Minion-provided
+functions, and the notion of "current instance" still applies during the
+expansion of that variable.  However, Minion property *syntax* -- `{WORD} --
+is available only to property definitions discovered by Minion when it is
+computing a property value; it does not apply to variables evaluated with
+`$(VAR)` or `$(call VAR,...)`.
 
 Minion property evaluation is memoized, so each property definition is
 expanded no more than once for each instance.
-
-Note that instances have no associated "state".  All property definitions
-are purely functional in nature.  As such, there is no notion of "creating"
-or "destroying" instances.  We cannot say whether an instance "exists" in a
-makefile or not ... but we can talk about whether it is *mentioned* in a
-goal or as an input.  You can think of a class as a function -- somewhat
-elaborate and multifacted, but ultimately a function -- that yields a set of
-property definitions.  An instance identifies the function (class) and its
-inputs (argument list).
-
-### Simple and Recursive Variables
-
-Make supports two "flavors" of variables, "simple" (using `:=`) and
-"recursive" (using `=`).  The above discussion assumes that properties are
-defined using recursive (`=`) assignments.  Properties *may* be defined
-using simple assignments.  With `:=`, values are expanded when and where the
-assignment appears (prior to inclusion of `minion.mk`), so they may not make
-use of `{...}` syntax or Minion-defined functions and variables.
 
 
 ## Argument Lists
@@ -164,80 +205,17 @@ Within a property definition, the `_args` variable and the `_namedArgs` and
 used to access the named and unnamed arguments of the current instance.
 
 
-## Cached Rules
-
-Ordinarily, every time you invoke `make`, Minion computes the `rule`
-property for all goals and their transitive dependencies prior to Make's
-rule processing phase.  If your makefile describes hundreds or thousands of
-build steps, this can take a perceptible amount of time.  To accelerate
-incremental builds, Minion can write many or all of its generated rules to a
-cache file, and avoid re-computing them every time `make` is invoked.
-
-You can enable caching by defining the variable `minionCache` in your
-makefile, setting it to a list of goals to be cached.  The rules of these
-goals and their transitive dependencies will be written to a cache file.
-
-When using `minionCache`, you can still build uncached goals -- goals that
-are not listed in the `minionCache` word list.  Minion will use cached rules
-when they are present, and dynamically generate any other required rules.
-
-Any changes to your makefile will invalidate the rule cache, so caching will
-generally not complicate your workflow.  However, there are some situations
-that where the cached result might not produce the same result as a
-non-cached build:
-
-  1. Calling `$(wildcard ...)` or `$(shell ...)` in your makefile.
-
-     To address this, call the Minion-provided functions `_wildcard` and
-     `_shell` instead.  These provide equivalent functionality, but keep
-     Minion informed of dependencies so that it can rebuild cache files when
-     the results change.  For example:
-
-         $(wildcard *.c)  -->  $(call _wildcard,*.c)
-
-     Or better yet, when possible use wildcard [indirections](#indirections)
-     -- e.g. `@*.c` -- which also allow Minion to track these dependencies.
-
-  2. Referencing environment variables in your makefile that change between
-     invocations.
-
-     While the first order of business would be to tightly control these
-     environmental dependencies in order to ensure repeatable builds, there
-     may remain variables you want your makefile to access, and which could
-     change in subsequent builds.  In these cases, you can access the
-     variables using `$(call _var,VARNAME)` instead of `$(VARNAME)`.  This
-     will allow Minion to detect changes that invalidate the rule cache.
-
-Variables assigned using Make's command line syntax -- e.g. `make all
-CC.flags=-W` -- do not have this problem.  Minion will bypass the cache
-whenever command-line assignments are used.
-
-If you have a limited number of build steps that depend on `$(shell ...)` or
-external variables, you can selectively exclude them from caching instead of
-tracking those dependencies and invalidting the entire cach file.  Just set
-`minionNoCache` to a list of instances to exclude.
-
-        ...
-        minionCache = default
-        minionNoCache = VersionStamp(prog)
-        ...
-
-Note that whereas `minionCache` follows all transitive dependencies,
-`minionNoCache` does not.  Non-cached instances may be upstream and
-downstream of cached instances.
-
-
 ## Builders
 
 All instances being built must implement this interface.  It consists of
 just three properties:
 
- * `rule` : Make source code that defines a rule for the instance.
+ * `rule` : Make source code that defines the rule for this instance.
 
  * `out`: the output file path or phony target named by the rule.
 
- * `needs`: a list of instances whose rules are referenced by this
-   instance's rule.
+ * `needs`: a list of the instances whose outputs are prerequisites of the
+   rule.
 
 User-defined classes do not need to implement these directly.  Generally,
 they will benefit from inheriting from `Builder` and overriding properties
@@ -266,7 +244,6 @@ handles a number of low-level responsibilities, including the following:
 Subclasses can leverage this functionality by inheriting from Builder, and
 can then customize their functionality by defining or overriding some of
 these properties.
-
 
 ### `{rule}`
 
@@ -313,7 +290,7 @@ generated by the instance, or, in the case of a phony instance, the phony
 target name.
 
 Users should rely on Builder's definition of `{out}` because it satisfies a
-very important requirement that different instances will not have conficting
+very important requirement that different instances will not have conflicting
 output file paths.  Users can customize this behavior by overriding the
 following properties:
 
@@ -321,7 +298,7 @@ following properties:
    when constructing the output file name.  For example, `.o` or `%.gz`.  A
    `%` in `{outExt}` is replaced with the extension of the input file name.
 
-   It is expected that most subclasses wil override `{outExt}` to
+   It is expected that most subclasses will override `{outExt}` to
    appropriately designate output file types.
 
  * `{outDir}`: By default, this identifies a directory that is underneath
@@ -336,7 +313,7 @@ When using Minion, we generally don't care where intermediate output files
 are located or what they are named, since we refer to them by their instance
 names.  As a result, most derived classes override only `{outExt}` and leave
 the other properties unchanged.  Users overriding `{outDir}` or `{outName}`
-shoud take care to avoid conflicts with other instances.
+should take care to avoid conflicts with other instances.
 
 Overriding `{outDir}` will affect the location of the target, but not the
 location of ancillary files like `{vvFile}` or `{depsMF}` (if they exist).
@@ -377,7 +354,7 @@ expansion happens prior to the rule processing phase.  The value of `{^}` is
 not identical to Make's `$^`, but it is more useful for rule construction:
 it is a list of the files that correspond to target IDs in {in}, and it does
 not include {deps}, {oo}, or implicit dependencies (declared as
-prerequisited via {depsFile}), or other files that would not normally appear
+prerequisites via {depsFile}), or other files that would not normally appear
 as command line arguments.  Also, duplicate entries are not pruned, so in
 that respect it is more like `$+` than `$^`.
 
@@ -509,6 +486,68 @@ include information other than `{command}` that might affect target
 validity.
 
 
+## Cached Rules
+
+Ordinarily, every time you invoke `make`, Minion computes the `rule`
+property for all goals and their transitive dependencies prior to Make's
+rule processing phase.  If your makefile describes hundreds or thousands of
+build steps, this can take a perceptible amount of time.  To accelerate
+incremental builds, Minion can write many or all of its generated rules to a
+cache file, and avoid re-computing them every time `make` is invoked.
+
+You can enable caching by defining the variable `minionCache` in your
+makefile, setting it to a list of goals to be cached.  The rules of these
+goals and their transitive dependencies will be written to a cache file.
+
+The cache does not limit what you can build.  Minion will use cached rules
+when they are present, and dynamically generate any required rules that are
+not present in the cache.
+
+Any changes to your makefile will invalidate the rule cache, so caching will
+generally not complicate your workflow.  However, there are some situations
+in which external dependencies can affect rule generation and can
+potentially change between when the cache is generated and when the cache is
+used, resulting in consistency problems:
+
+  1. Calling `$(wildcard ...)` or `$(shell ...)`.
+
+     When using caching, call the Minion-provided functions `_wildcard` and
+     `_shell` instead.  They provide equivalent functionality, but keep
+     Minion informed of dependencies so that it can rebuild cache files when
+     the results change.  For example:
+
+         $(wildcard *.c)  -->  $(call _wildcard,*.c)
+
+     [Wildcard indirections](#indirections) -- e.g. `@*.c` -- are *not* a
+     concern, because their dependencies are already automatically tracked.
+
+  2. Referencing environment variables that change between invocations.
+
+     When using caching, and your makefile needs to access environment
+     variables that might change in subsequent builds, access them using
+     `$(call _var,VARNAME)` instead of `$(VARNAME)`.  This will allow Minion
+     to detect changes and rebuild the cache when necessary.
+
+     Command-line variable assignments -- e.g. `make all CC.flags=-W` -- are
+     *not* a concern, however, because Minion disables caching whenever they
+     are present.
+
+If you have a limited number of instances that depend on these external
+variables, you can selectively exclude those instances from caching.  This
+can avoid invalidation of the entire cache file when just those rules are
+affected.  To do this, set `minionNoCache` to a list of instances to
+exclude.
+
+        ...
+        minionCache = default
+        minionNoCache = VersionStamp(prog)
+        ...
+
+Note that whereas `minionCache` follows all transitive dependencies,
+`minionNoCache` does not.  Non-cached instances may be upstream and
+downstream of cached instances.
+
+
 ## Debugging
 
 The variable `minionDebug` can be used to turn on debug messages.  Each
@@ -589,21 +628,17 @@ class names begin uppercase.  All-caps names might conflict with environment
 variables or Make's built-in variable settings (e.g LINK.c, COMPILE.c,
 etc.).  Variables defined by by minion.mk begin with "minion" or "_" to avoid
 unintentional conflicts with user makefiles, except for built-in classes and
-the following "unprefixed" names:
+the following un-prefixed names:
 
-    V, OUTDIR, VOUTDIR            Control of build output
-    ., get                        Core object system functions
-    \s \t \n \e \H ; [ ] [[ ]]    Character constants
-    minionStart
-    minionEnd
-    minionDebug
-    minionCache
-    minionNoCache
+    V, OUTDIR, VOUTDIR               Control of build output
+    ., get                           Core object system functions
+    \s \t \n \e \H \q ; [ ] [[ ]]    Character constants
+    clean
+    help
+    graph
 
-We generally avoid single-letter global variables so that they can be used
-as "local" variables (in Make `foreach` expressions).  Underscore ("_")
-may be used as a namespace delimiter for variables that are associated with
-a class but not property definitions.
+We generally avoid single-letter global variables, reserving them for use as
+"local" variables (in Make `foreach` expressions).
 
 
 ### Supported Functions
@@ -743,7 +778,7 @@ The following BNF describes target names:
     Class     := ClassChar+
     ArgList   := ( Arg ( ',' Arg )* )?
     Arg       := ( Name `:` )? Value
-    Value     := ( ArgList | ValueChar )+
+    Value     := ( ValueChar+ | '(' ArgList ')' )*
     Name      := NameChar+
     Property  := PropChar+
 
@@ -761,9 +796,6 @@ other instances embedded within it, which means it may contain `(` and `)`,
 characters, but only in balanced pairs.  An argument may also contain `,`
 and `:`, but only within nested parentheses.
 
-In general, instances will contain special shell characters, so they may
-have to be quoted when being passed on the command line.
-
 ### Notes on Special Characters
 
 Characters that are "special" in POSIX shells or GNU Make can complicate
@@ -777,12 +809,13 @@ following:
     Make specials:  ~   :        [ ] * ? # $ % ; \ =
     Bash specials:  ~ !  ( ) < > [ ] * ? # $ % ; \   | & ` ' " { }
 
-Minion instances and indirections may contain a number of these special
-characters because instances generally do not appear as targets and
-prerequisites in Make rules, and they are not passed to the shell as file
-names.  When Minion constructs output file paths from instance names, but it
-is careful to use shell-safe characters to escape any unsafe characters in
-instance names.  The following shell-unsafe characters may appear in
-instances or indirections:
+The following shell-unsafe characters may appear in instances or
+indirections:
 
     ( ) < > { } : ! * ~ < >
+
+Instances generally do not appear as targets and prerequisites in Make
+rules, and they are not passed to the shell as file names.  When Minion
+constructs output file paths from instance names, it is careful to use
+shell-safe characters to escape any unsafe characters incorporated from
+instance names.

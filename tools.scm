@@ -426,26 +426,6 @@
 (declare (_printf text) &native &public)
 
 
-;; If NAME is a goal return its instance ID form; otherwise empty.
-;;
-(define `(_isGoal name)
-  &native
-  (or (_isInstance name)
-      (_isIndirect name)
-      (_isAlias name)))
-
-
-;; Translate a list of target into IDs, and warn when an non-instance ID
-;; is present.
-;;
-(define (_goalsToIDs goals where)
-  &native
-  (_expand (foreach (g goals)
-             (or (_isGoal g)
-                 (error (.. where " contains unknown goal '" g "'"))))
-           where))
-
-
 ;; Escape VALUE for inclusion literally in `ifeq "..." "..."` contexts.
 (define (_qesc value)
   &native
@@ -501,9 +481,15 @@
       "@mv " tmpFile " " cacheFile "\n"))
 
 
+;; Get target IDs referenced by a variable, and warn if any of them are
+;; non-Minion ("plain" names that might be source files or make targets).
+;;
 (define (_varToIDs varName)
   &native
-  (_goalsToIDs (native-var varName) varName))
+  (foreach (t (_expand (native-var varName)))
+    (if (filter "%)" t)
+        t
+        (error (.. varName " references unknown target '" t "'")))))
 
 
 ;; Return the Make recipe (sequence of command lines) that will
@@ -526,7 +512,6 @@
   (_rcr2 cacheFile includes excludes _cacheGroupSize))
 
 
-(export (native-name _goalsToIDs) 1)
 (export (native-name _rulecacheRecipe) nil)
 (export (native-name _rcr2) nil)
 (export (native-name _varToIDs) 1)

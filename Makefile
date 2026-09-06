@@ -5,7 +5,11 @@
 # then, if they successfully build, compare them to the ./ version.  If they
 # differ, `make` will fail.
 #
-# `make promote` copies the build versions of $(MO) and $(DO) to "./".
+# `make promote` copies the built versions of $(MO) and $(DO) to "./".
+#
+# Note that the "snapshot" version of minion.mk is also treated as *source*
+# for the portion that precedes the Scam-generated functions.  demo.md,
+# however, is generated from demo/demo-session.md.
 #
 
 # Output files

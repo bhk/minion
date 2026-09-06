@@ -2,7 +2,7 @@
 
 ## Minion Todo
 
- - Aliases in ingredient lists
+ - _Exec.inX  --> Builder.inX
 
  - {inherit NAME} : Similar to {inherit}, but it looks up the inherited
    definition of a different property, not the one currently being

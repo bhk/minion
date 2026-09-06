@@ -83,8 +83,10 @@ _Alias.in = $($(_argText))
 # _Clean(INSTANCE) : Clean INSTANCE and its direct & indirect depedencies.
 #
 _Clean.inherit = _IsPhony Builder
-_Clean.in = $(patsubst %,Clean(%),$(filter %$],$(call get,needs,$(_argText))))
-_Clean.command = $(if $(filter-out %$],$(_argText)),@echo 'Cannot clean {@}' && false,$(if $(call _hasProperty,cleanCommand,$(_argText)),$(call get,cleanCommand,$(_argText)),rm -f $(call get,out,$(_argText))))
+_Clean.ids = $(filter %$],$(call _expand,$(_args)))
+_Clean.in = $(patsubst %,Clean(%),$(call get,needs,{ids}))
+_Clean.command = $(foreach i,{ids},\
+  $(if $(call _hasProperty,cleanCommand,$i),$(call get,cleanCommand,$i),rm -f $(call get,out,$i)))
 
 
 # Variants(TARGETS) : Build {all} variants of TARGETS.  Each variant
@@ -256,10 +258,10 @@ _Write.in =
 # Graph(GOALS) : Draw a graph of dependencies of instances
 #
 _Graph.inherit = Phony
-_Graph.roots = $(call _Graph_filter,{prune},$(call _goalsToIDs,$(_args),$(_self)))
+_Graph.roots = $(call _Graph_filter,{prune},$(call _expand,$(_args),$(_self)))
 _Graph.rule = {@}: ; @true $$(info $$(call get,text,$(call _escape,$(_self))))
 _Graph.text = $(call _graphDeps,_Graph_getNeeds,{nodeNameFn},{prune},{roots})
-_Graph.prune = $(_Graph_IGNORE)
+_Graph.prune =
 _Graph.nodeNameFn = _Graph_getName
 
 _Graph_filter = $(filter-out $1,$(filter %$],$2))
@@ -454,7 +456,7 @@ _cacheGroupSize ?= 40
 #--------------------------------
 
 define _helpMessage
-Minion v1.0b4 usage:
+Minion v1.1b4 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
@@ -570,27 +572,27 @@ define _epilogue
 
   ifndef MAKECMDGOALS
     .DEFAULT_GOAL = default
-    _goalIDs := $(call _buildGoalID,default)
-  else ifneq "" "$(filter $$%,$(MAKECMDGOALS))"
-    # Special raw Make diagnostic mode that expects a single command-line
-    # argument with embedded spaces. In this case, we know MAKECMDGOALS does
-    # not reflect the actual command line arguments.
+  endif
+
+  __modeKey := $(word 1,$(MAKECMDGOALS))
+  __modeArgs := $(wordlist 2,999999,$(MAKECMDGOALS))
+
+  ifneq "" "$(filter $$%,$(__modeKey))"
+    # Expression mode expects a Make expression that may have embedded
+    # spaces.  MAKECMDGOALS may not reflect the actual arguments.
     $$%: ; @#$(info $$$* = $(call _qv,$(call or,$$$*)))
     %: ; @echo 'Cannot build "$*" alongside $$(...)' && false
-  else
-    __modeKey := $(word 1,$(MAKECMDGOALS))
-    __modeArgs := $(wordlist 2,999999,$(MAKECMDGOALS))
-    ifneq "" "$(and $(__modeArgs),$(filter clean help,$(__modeKey)))"
-      # help or clean mode
-      ifeq "help" "$(__modeKey)"
-         _error = $(info $(subst $(\n),$(\n)   ,ERROR: $1)$(\n))
-         _goalIDs := _Goal(help) $(patsubst %,_HelpGoal(%),$(__modeArgs))
-      else
-         _goalIDs := _Goal(clean) $(patsubst %,_CleanGoal(%),$(__modeArgs))
-      endif
+  else ifneq "" "$(and $(filter clean help,$(__modeKey)),$(__modeArgs))"
+    # help or clean mode
+    ifeq "help" "$(__modeKey)"
+       _error = $(info $(subst $(\n),$(\n)   ,ERROR: $1)$(\n))
+       _goalIDs := _Goal(help) $(patsubst %,_HelpGoal(%),$(__modeArgs))
     else
-      _goalIDs := $(foreach g,$(MAKECMDGOALS),$(call _buildGoalID,$g))
+       _goalIDs := _Goal(clean) $(patsubst %,_CleanGoal(%),$(__modeArgs))
     endif
+  else
+    # build mode
+    _goalIDs := $(foreach g,$(or $(MAKECMDGOALS),default),$(call _buildGoalID,$g))
   endif
 
   ifndef minionCache
@@ -680,10 +682,9 @@ _traverse = $(if $(word 1,$3),$(call _traverse,$1,$2,$(call $1,$2,$(word 1,$3)) 
 _graphDeps = $(call _graph,$1,$2,$3,$(call _traverse,$1,$3,$4))
 _uniqQ = $(if $1,$(word 1,$1)   $(call _uniqQ,$(filter-out $(word 1,$1),$1)))
 _unique = $(filter %,$(subst ^c,^,$(subst ^p,%,$(call _uniqQ,$(subst %,^p,$(subst ^,^c,$1))))))
-_goalsToIDs = $(call _expand,$(foreach w,$1,$(or $(or $(call _isInstance,$w),$(call _isIndirect,$w),$(call _isAlias,$w)),$(error $2 contains unknown goal '$w'))),$2)
 _rulecacheRecipe = $(info Updating Minion cache...)$(call _rcr2,$1,$(call _rollup,$(call _varToIDs,minionCache)),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
 _rcr2 = @mkdir -p $(dir $1)$(\n)@> $1_tmp_$(\n)$(foreach w,$(call _group,$(filter-out $3,$2),$4),@$(call _printf,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)_$x_needs = $(filter $3,$(call _depsOf,$x)))$(\n))) >> $1_tmp_$(\n))@$(call _printf,_cachedIDs = $(filter-out $3,$2)$(\n)$(foreach w,minionCache minionNoCache $('varLog),$(call _checkValue,$1,$($w),$$($w)))$(if $('globLog),$(call _checkValue,$1,$(wildcard $('globLog)),$$(wildcard $('globLog))))$(foreach w,$('shellLog),$(call _checkValue,$1,$(shell $(subst !1,!,$(subst !0, ,$w))),$$(shell $(subst !1,!,$(subst !0, ,$w)))))) >> $1_tmp_$(\n)@mv $1_tmp_ $1$(\n)
-_varToIDs = $(call _goalsToIDs,$($1),$1)
+_varToIDs = $(foreach w,$(call _expand,$($1)),$(if $(filter %$],$w),$w,$(error $1 references unknown target '$w')))
 _checkValue = $(\n)ifneq "$(call _qesc,$2)" "$3"$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)
 _qesc = $(subst $(\n),$$($(\n)),$(subst \#,$$(\H),$(subst ",$$(\q),$(subst $$,$$$$,$1))))
 
