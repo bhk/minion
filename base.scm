@@ -199,13 +199,17 @@
   (expect (sort "ba*.scm b*e.scm") globLog))
 
 
+;; Encode \s and \t as non-space in reversible way
 (define `(demote str)
   &public
-  (subst " " "!0" (subst "!" "!1" str)))
+  (subst "!" "!1" "\t" "!+" " " "!0" str))
 
+
+;; Reverse demote
 (define `(promote str)
   &public
-  (subst "!1" "!" (subst "!0" " " str)))
+  (subst "!0" " " "!+" "\t" "!1" "!" str))
+
 
 ;; Same as $(shell ...), but logs commands issues.
 ;;

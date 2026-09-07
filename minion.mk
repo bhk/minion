@@ -83,7 +83,7 @@ _Alias.in = $($(_argText))
 # _Clean(INSTANCE) : Clean INSTANCE and its direct & indirect depedencies.
 #
 _Clean.inherit = _IsPhony Builder
-_Clean.ids = $(filter %$],$(call _expand,$(_args)))
+	_Clean.ids = $(filter %$],$(call _expand,$(_args)))
 _Clean.in = $(patsubst %,Clean(%),$(call get,needs,{ids}))
 _Clean.command = $(foreach i,{ids},\
   $(if $(call _hasProperty,cleanCommand,$i),$(call get,cleanCommand,$i),rm -f $(call get,out,$i)))
@@ -195,7 +195,6 @@ _Exec.command = ( {exportPrefix} {exec} ) > {@} || ( rm -f {@}; false )
 _Exec.exec = {<} {execArgs} $(wordlist 2,9999,{^})
 _Exec.execArgs =
 _Exec.outExt = .out
-_Exec.inX = $(call _expand,{in},in)
 # Infer only makes sense for the first item, the one whose type we know.
 _Exec.inIDs = $(call _inferIDs,$(word 1,{inX}),{inferClasses}) $(wordlist 2,999999,{inX})
 _Exec.inferClasses = CExe.c CExe++.cpp CExe++.cc
@@ -257,10 +256,11 @@ _Write.in =
 
 # Graph(GOALS) : Draw a graph of dependencies of instances
 #
-_Graph.inherit = Phony
-_Graph.roots = $(call _Graph_filter,{prune},$(call _expand,$(_args),$(_self)))
+_Graph.inherit = Builder
+_Graph.needs =
 _Graph.rule = {@}: ; @true $$(info $$(call get,text,$(call _escape,$(_self))))
 _Graph.text = $(call _graphDeps,_Graph_getNeeds,{nodeNameFn},{prune},{roots})
+_Graph.roots = $(call _Graph_filter,{prune},{inX})
 _Graph.prune =
 _Graph.nodeNameFn = _Graph_getName
 
@@ -310,10 +310,9 @@ _Builder.^ = $(call get,out,{inIDs})
 < = $(call _badAuto,<,$0)
 ^ = $(call _badAuto,^,$0)
 
-_badAuto = $(call _error,"$$$1" was evaluated prior to rule processing$(\n)$(call _whereAmI,$2))
-
 _Builder.in = $(_args)
-_Builder.inIDs = $(call _inferIDs,$(call _expand,{in},in),{inferClasses})
+_Builder.inX = $(call _expand,{in},in)
+_Builder.inIDs = $(call _inferIDs,{inX},{inferClasses})
 
 # up: dependencies specified by the class
 _Builder.up =
@@ -335,7 +334,7 @@ _Builder.inferClasses =
 _Builder.outExt = %
 _Builder.outDir = $(dir {outBasis})
 _Builder.outName = $(foreach e,$(notdir {outBasis}),$(basename $e)$(subst %,$(suffix $e),{outExt}))
-_Builder.outBasis = $(VOUTDIR)$(call _outBasis,$(_class),$(_argText),{outExt},$(call get,out,$(filter $(_arg1),$(word 1,$(call _expand,{in},in)))),$(_arg1))
+_Builder.outBasis = $(VOUTDIR)$(call _outBasis,$(_class),$(_argText),{outExt},$(call get,out,$(filter $(_arg1),$(word 1,{inX}))),$(_arg1))
 
 # message to be displayed when the command executes (if non-empty)
 _Builder.message ?= \#-> $(_self)
@@ -631,7 +630,7 @@ _isAlias = $(if $(filter f% o%,$(origin $1)),Alias($1))
 _buildGoalID = $(if $(or $(_isInstance),$(_isIndirect)),_BuildGoal($1),$(_isAlias))
 _set = $(eval $$1 := $$2)$2
 _wildcard = $(if $(call _set,'globLog,$(sort $('globLog) $1)),)$(wildcard $1)
-_shell = $(if $(call _set,'shellLog,$(sort $('shellLog) $(subst $(\s),!0,$(subst !,!1,$1)))),)$(shell $1)
+_shell = $(if $(call _set,'shellLog,$(sort $('shellLog) $(subst $(\s),!0,$(subst $(\t),!+,$(subst !,!1,$1))))),)$(shell $1)
 _var = $(if $(call _set,'varLog,$(sort $('varLog) $1)),)$($1)
 _ivar = $(filter-out %@,$(subst @,@ ,$1))
 _EI = $(call _error,$(if $(filter %@,$1),Invalid target (ends in '@'): $1,Indirection '$1' references undefined variable '$(_ivar)')$(if $2,$(\n)Found while expanding $(if $(filter _BuildGoal$[%,$2),command line goal,$2)))
@@ -648,25 +647,27 @@ _describeVar = $2$(if $(filter r%,$(flavor $1)),$(if $(findstring $(\n),$(value 
 
 # objects.scm
 
+_E0 = $(call _error,Mal-formed target '$(_self)'; $(if $(filter $[%,$(_self)),no CLASS before '$[',$(if $(findstring $[,$(_self)),no '$]' at end,unbalanced '$]')))
 _idC = $(if $(findstring $[,$1),$(word 1,$(subst $[, ,$1)))
 _isClassInvalid = $(filter u%,$(flavor $(_idC).inherit))
-_pup = $(filter-out &%,$($(word 1,$1).inherit) &$1)
-_walk = $(if $1,$(if $(findstring s,$(flavor $(word 1,$1).$2)),$1,$(call _walk,$(_pup),$2)))
-_hasProperty = $(if $(or $(findstring s,$(flavor $2.$1)),$(call _walk,$(filter-out $(\s)|%,$(subst $[, |,$2)),$1)),1)
-_E1 = $(call _error,Undefined property '$2' for $(_self) was referenced$(if $(filter u%,$(flavor $(_class).inherit)),;$(\n)$(_class) is not a valid class name ($(_class).inherit is not defined),$(if $3,$(if $(filter ^%,$3), from {inherit} in,$(if $(filter &&%,$3), from {$2} in, during evaluation of)):$(\n)$(call _describeVar,$(if $(filter &%,$3),$(foreach w,$(lastword $(subst ., ,$3)),$(word 1,$(call _walk,$(word 1,$(subst &, ,$(subst ., ,$3))),$w)).$w),$(if $(filter ^%,$3),$(subst ^,,$(word 1,$3)).$2,$3)))))$(\n))
-_cx = $(if $1,$(if $(value &$1.$2),&$1.$2,$(call _fset,$(if $4,$(subst $],],~$(_self).$2),&$1.$2),$(foreach w,$(word 1,$1).$2,$(if $(filter s%,$(flavor $w)),$(subst $$,$$$$,$(value $w)),$(subst },$(if ,,,&$$0$]),$(subst {,$(if ,,$$$[call .,),$(subst {inherit},$(if $(findstring {inherit},$(value $w)),$$(call $(call _cx,$(call _walk,$(if $4,$(_class),$(_pup)),$2),$2,^$1))),$(value $w)))))))),$(_E1))
-.& = $(if $(findstring s,$(flavor $(_self).$1)),$(call _cx,$(_self),$1,$2,1),$(if $(findstring s,$(flavor &$(_class).$1)),&$(_class).$1,$(call _fset,&$(_class).$1,$(value $(call _cx,$(call _walk,$(_class),$1),$1,$2)))))
-. = $(if $(filter s%,$(flavor ~$(_self).$1)),$(value ~$(_self).$1),$(call _set,~$(_self).$1,$(call $(.&))))
-_E0 = $(call _error,Mal-formed target '$(_self)'; $(if $(filter $[%,$(_self)),no CLASS before '$[',$(if $(findstring $[,$(_self)),no '$]' at end,unbalanced '$]')))
+_chp+ = $(if $(filter %$],$1),$(_idC),$(filter-out &%,$($(word 1,$1).inherit) &$1))
+_walk = $(if $2,$(if $(findstring s,$(flavor $(word 1,$2).$1)),$2,$(call _walk,$1,$(call _chp+,$2))))
+_hasProperty = $(if $(or $(findstring s,$(flavor $2.$1)),$(call _walk,$1,$(filter-out $(\s)|%,$(subst $[, |,$2)))),1)
+_E1 = $(call _error,Undefined property {$1} for $(_self) was referenced$(if $3, by {inherit$(if $(findstring .$1=,$3=),, $1)} in,$(if $2, from))$(if $(or $3,$2),:$(\n)$(call _describeVar,$(if $3,$3,$(if $(filter &%,$2),$(word 1,$(call _walk,$(lastword $(subst .,. ,$2)),$(patsubst &%,%,$(word 1,$(subst ., .,$2))))).$(lastword $(subst .,. ,$2)),$2)),   ))$(if $(filter u%,$(flavor $(_class).inherit)),$(\n) NOTE: $(_class).inherit is not defined!$(\n)))
+_cxInherit = $(call _cxMemo,$1,$(or $(call _walk,$1,$(call _chp+,$2)),$(call _E1,$1,,$3)))
+_cxTok = $(patsubst {%},$$(call!0.,%,$$0),$(if $(findstring {inherit,$1),$(foreach w,$1,$(if $(filter {inherit} {inherit!0%},$w),$$(call!0$(subst $(\s),!0,$(call _cxInherit,$(if $(filter {inherit},$w),$2,$(patsubst {inherit!0%},%,$w)),$3,$4))),$w)),$1))
+_cx = $(foreach w,$(word 1,$2).$1,$(if $(filter s%,$(flavor $w)),$(subst $$,$$$$,$(value $w)),$(if $(findstring {,$(value $w)),$(subst !1,!,$(subst !+,	,$(subst !0, ,$(subst $(\s),,$(call _cxTok,$(subst {inherit!0 ,{inherit!0,$(subst !0,!0 ,$(subst $;,$(if ,, , ),$(subst $], $] ,$(subst $[, $[ ,$(subst },} ,$(subst {, {,$(subst $(\s),!0,$(subst $(\t),!+,$(subst !,!1,$(value $w))))))))))),$1,$2,$w))))),$(value $w))))
+_cxMemo = $(if $(filter r%,$(flavor &$2.$1)),&$2.$1,$(call _fset,&$2.$1,$(call _cx,$1,$2)))
+. = $(if $(filter s%,$(flavor ~$(_self).$1)),$(value ~$(_self).$1),$(call _set,~$(_self).$1,$(if $(findstring s,$(flavor $(_self).$1)),$(foreach 0,&$(_self).$1,$(call or,$(call _cx,$1,$(_self)))),$(call $(if $(filter r%,$(flavor &$(_class).$1)),&$(_class).$1,$(call _fset,&$(_class).$1,$(call _cx,$1,$(or $(call _walk,$1,$(_class)),$(call _E1,$1,$2,)))))))))
 get = $(foreach _self,$2,$(foreach _class,$(if $(findstring $[,$(_self)),$(or $(filter-out |%,$(subst $[, |,$(filter %$],$(_self)))),$(_E0)),$(if $(findstring $],$(_self)),$(_E0),_File)),$(call .,$1)))
 _argText = $(patsubst $(_class)(%),%,$(_self))
 _args = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))))
 _arg1 = $(word 1,$(_args))
 _namedArgs = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))),$1)
 _namedArg1 = $(word 1,$(_namedArgs))
-_describeProp = $(if $1,$(if $(filter u%,$(flavor $(word 1,$1).$2)),$(call _describeProp,$(or $(_idC),$(_pup)),$2),$(call _describeVar,$(word 1,$1).$2,   )$(if $(and $(filter r%,$(flavor $(word 1,$1).$2)),$(findstring {inherit},$(value $(word 1,$1).$2))),$(\n)$(\n)...wherein {inherit} references:$(\n)$(\n)$(call _describeProp,$(or $(_idC),$(_pup)),$2))))
-_chain = $(if $1,$(call _chain,$(_pup),$2 $(word 1,$1)),$(filter %,$2))
-_whereAmI = during evaluation of $(if $(filter ~%,$1),'$(patsubst ~%,%,$(subst ],$],$1))',$(if $(filter &%,$1),'$(patsubst &%,%,$1)',$$($1))$(patsubst %, in context of %,$(_self)))
+_describeProp = $(if $1,$(if $(filter u%,$(flavor $(word 1,$1).$2)),$(call _describeProp,$(or $(_idC),$(_chp+)),$2),$(call _describeVar,$(word 1,$1).$2,   )$(if $(and $(filter r%,$(flavor $(word 1,$1).$2)),$(findstring {inherit},$(value $(word 1,$1).$2))),$(\n)$(\n)...wherein {inherit} references:$(\n)$(\n)$(call _describeProp,$(or $(_idC),$(_chp+)),$2))))
+_chain = $(if $1,$(call _chain,$(_chp+),$2 $(word 1,$1)),$(filter %,$2))
+_badAuto = $(call _error,$$$$$1 was evaluated prior to rule processing$(\n)during evaluation of $(if $(filter &%,$2),$(word 1,$(patsubst &%,%,$2)),$$(call $2,...))$(if $(_self), in context of $(_self)))
 
 # tools.scm
 
@@ -683,7 +684,7 @@ _graphDeps = $(call _graph,$1,$2,$3,$(call _traverse,$1,$3,$4))
 _uniqQ = $(if $1,$(word 1,$1)   $(call _uniqQ,$(filter-out $(word 1,$1),$1)))
 _unique = $(filter %,$(subst ^c,^,$(subst ^p,%,$(call _uniqQ,$(subst %,^p,$(subst ^,^c,$1))))))
 _rulecacheRecipe = $(info Updating Minion cache...)$(call _rcr2,$1,$(call _rollup,$(call _varToIDs,minionCache)),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
-_rcr2 = @mkdir -p $(dir $1)$(\n)@> $1_tmp_$(\n)$(foreach w,$(call _group,$(filter-out $3,$2),$4),@$(call _printf,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)_$x_needs = $(filter $3,$(call _depsOf,$x)))$(\n))) >> $1_tmp_$(\n))@$(call _printf,_cachedIDs = $(filter-out $3,$2)$(\n)$(foreach w,minionCache minionNoCache $('varLog),$(call _checkValue,$1,$($w),$$($w)))$(if $('globLog),$(call _checkValue,$1,$(wildcard $('globLog)),$$(wildcard $('globLog))))$(foreach w,$('shellLog),$(call _checkValue,$1,$(shell $(subst !1,!,$(subst !0, ,$w))),$$(shell $(subst !1,!,$(subst !0, ,$w)))))) >> $1_tmp_$(\n)@mv $1_tmp_ $1$(\n)
+_rcr2 = @mkdir -p $(dir $1)$(\n)@> $1_tmp_$(\n)$(foreach w,$(call _group,$(filter-out $3,$2),$4),@$(call _printf,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)_$x_needs = $(filter $3,$(call _depsOf,$x)))$(\n))) >> $1_tmp_$(\n))@$(call _printf,_cachedIDs = $(filter-out $3,$2)$(\n)$(foreach w,minionCache minionNoCache $('varLog),$(call _checkValue,$1,$($w),$$($w)))$(if $('globLog),$(call _checkValue,$1,$(wildcard $('globLog)),$$(wildcard $('globLog))))$(foreach w,$('shellLog),$(call _checkValue,$1,$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w)))),$$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w))))))) >> $1_tmp_$(\n)@mv $1_tmp_ $1$(\n)
 _varToIDs = $(foreach w,$(call _expand,$($1)),$(if $(filter %$],$w),$w,$(error $1 references unknown target '$w')))
 _checkValue = $(\n)ifneq "$(call _qesc,$2)" "$3"$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)
 _qesc = $(subst $(\n),$$($(\n)),$(subst \#,$$(\H),$(subst ",$$(\q),$(subst $$,$$$$,$1))))

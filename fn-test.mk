@@ -112,6 +112,7 @@ $(call _expectEQ,\
   $(call get,s,TB(a)),\
   <B(a).s:$$(_argText);{}>)
 
+
 # instance-defined, recursive variable
 # + {inherit}, {prop}
 # + class-defined simple & recursive variables

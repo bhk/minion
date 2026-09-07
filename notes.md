@@ -1,16 +1,10 @@
 # Notes
 
-## Minion Todo
-
- - _Exec.inX  --> Builder.inX
-
- - {inherit NAME} : Similar to {inherit}, but it looks up the inherited
-   definition of a different property, not the one currently being
-   evaluated.  Just checking for this case might slightly slow down property
-   definition compilation.
+## Minion TODO
 
  - `make 'C(A).P'` : Compute and output property, like `make help 'C(A).P'`
    but without any extraneous text.
+
 
 ## Design Notes
 

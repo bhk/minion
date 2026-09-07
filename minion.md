@@ -113,11 +113,9 @@ Although Make's global variables *can* be modified at run time using `$(eval
 assumes/requires that property definitions remain unchanged during
 execution.
 
-Since there is no mutable state, there is no notion of "creating" or
-"destroying" instances.  There is only the computing of values of properties
-for instances.  We cannot say whether an instance "exists" in a makefile or
-not ... but we can talk about whether it is *mentioned*, either in a
-makefile or on the command line.
+Since there is no mutable state, there is no "creating" or "destroying" of
+instances.  Execution involves only computing values of properties, and the
+only properties computed are those that are requested.
 
 
 ## Classes
@@ -153,25 +151,33 @@ avail themselves of the Minion features described below.  We recommend to
 avoid simple assignments in property definitions for syntactic consistency
 across your makefile.
 
-Recursive property definitions can, as with ordinary Make syntax, use
-`$(...)` expressions to substitute Make variables and call functions.  They
-may also use a Minion syntax, `{WORD}` to refer to other properties of the
-current instance.  To avoid confusion, Make's alternative `${...}` syntax
-for variable and function expansion is not supported within recursive
-property definitions.  To include an actual `{` or `}` character, use
-`$([[)` or `$(]])`.
+Recursive property definitions, as other variables in Make, can use `$(...)`
+expressions to substitute Make variables and call functions.  They may also
+use the following Minion-specific syntax constructs:
 
-`{WORD}` refers to the property named by `WORD`.  When this expression is
-expanded, it will be replaced by the value of that property computed for the
-*current* instance.
+ * `{PROP}` refers to other properties of the current instance.  `PROP` must
+   not contain any spaces, parentheses, or commas, and it cannot be
+   "inherit".  When this expression is expanded, it will be replaced by the
+   value of that property computed for the *current* instance.
 
-`{inherit}` is a special case; it expands to the inherited value of the
-*current* property -- in other words, the value the property would have
-taken on if this current definition had not been present.  This allows a
-subclass to modify, not simply replace, the value inherited from its base
-class.  For example:
+ * `{inherit}` queries the parent class for the value of the current
+   property -- in other words, the value the property would have taken on if
+   this current definition had not been present.  This allows a subclass to
+   modify, not simply replace, the value inherited from its base class.  For
+   example:
 
-    MyCC.flags = {inherit} -fwrapv
+        MyCC.flags = $(filter-out -Wextra,{inherit}) -fwrapv
+
+ * `{inherit PROP}` queries the parent class for the value of `PROP`.  This
+   performs a lookup of `PROP` that begins above the current point in the
+   inheritance chain.  This is similar to the function of the `super`
+   keyword in Smalltalk and some other languages.  It allows you to override
+   one property and still access the would-have-been-inherited value from
+   another property.  Here is a perhaps unrealistic but illustrative example:
+
+        RotImage.inherit = Image
+        RotImage.y = {inherit x}
+        RotImage.x = -{inherit y}
 
 Property definitions can make use of various [functions and variables
 exported by Minion](#exported-definitions), because property evaluation
@@ -180,7 +186,7 @@ only takes place after all the `minion.mk` definitions have been processed.
 When a property definition expands uses `$(VAR)` or `$(call VAR)`,
 expressions within that referenced variable can make use of Minion-provided
 functions, and the notion of "current instance" still applies during the
-expansion of that variable.  However, Minion property *syntax* -- `{WORD} --
+expansion of that variable.  However, Minion property *syntax* -- `{PROP} --
 is available only to property definitions discovered by Minion when it is
 computing a property value; it does not apply to variables evaluated with
 `$(VAR)` or `$(call VAR,...)`.
@@ -662,44 +668,47 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
 * `$(call get,PROP,IDS)`
 
-  Evaluate property PROP for each member of IDS.  IDS is a space-delimited
-  list of IDs.  The result is a space-delimited list of the corresponding
-  values.
+  Evaluate property `PROP` for each member of `ID`S.  `IDS` is a
+  space-delimited list of IDs.  The result is a space-separated list of the
+  property values for each ID.
 
-  If a file name (not an instance name) is passed to `get`, it will be
-  treated as an instances of the `_File` class.  This defines the property
-  `out`, which evaluates to the file name, and the properties `rule` and
-  `needs`, which are empty.
+  If an ID is a file name -- a word containing neither `(` nor `)` -- is
+  passed to `get`, it will be treated as `_File(ID)`.  `_File` defines the
+  properties `out` (which evaluates to the file name), `rule` (empty), and
+  `needs` (empty).
+
+  If an ID is mal-formed -- not a file name, but not beginning with `CLASS(`
+  and ending in `)` -- then a message is displayed and Make is exited.
 
 * `$(call .,PROP,$0)`
 
-  Evaluate property PROP for the current instance.  In property definitions,
-  `$(call .,PROP,$0)` is equivalent to `{PROP}`.  In other variables and
-  functions, `{...}` syntax is not supported, but `.` is available if they
-  are called during the evaluation of a property definition.  The second
-  argument is used to construct a diagnostic message only in the event PROP
-  is undefined.  It should be the name of the function calling `.`, which is
-  available in Make as `$0`.
+  Evaluate property `PROP` for the current instance.  In property
+  definitions, `$(call .,PROP,$0)` is equivalent to `{PROP}`.  In other
+  variables and functions, `{...}` syntax is not supported, but `.` is
+  available if they are called during the evaluation of a property
+  definition.  The second argument is used to construct a diagnostic message
+  only in the event `PROP` is undefined.  It should be the name of the
+  function calling `.`, which is available in Make as `$0`.
 
 * `$(call _shellQuote,STR)`
 
-  Quote STR as an argument for /bin/sh or /bin/bash.
+  Quote `STR` as an argument for /bin/sh or /bin/bash.
 
 * `$(call _printfEsc,STR)`
 
-  Escape STR for inclusion in a `printf` command line argument.
+  Escape `STR` for inclusion in a `printf` command line argument.
 
 * `$(call _printf,STR)`
 
-  Return a shell command that writes STR to stdout.
+  Return a shell command that writes `STR` to stdout.
 
 * `$(call _eq,A,B)`
 
-  Return "1" if A and B are equal, "" otherwise.
+  Return "1" if `A` and `B` are equal, "" otherwise.
 
 * `$(call _once,VAR)`
 
-  Return the value of VAR, evaluating it at most once.
+  Return the value of `VAR`, evaluating it at most once.
 
 * `$(_self)`
 
@@ -728,7 +737,7 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
 * `$(call _namedArgs,NAME)`
 
-  Return all arguments associated with NAME for the current instance.
+  Return all arguments associated with `NAME` for the current instance.
 
   For example, in `Class(a,b,x:1,x:2)`, `$(call _namedArgs,x)` returns "1 2".
 
@@ -739,13 +748,14 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 * `$(call _relpath,FROM,TO)`
 
   Construct a path that can be used to refer to file `TO` from file `FROM`.
-  If `TO` is an absolute path, it is returned as the result.  Otherwise, both
-  `FROM` must be a relative path and the result will be a relative path.
+  If `TO` is an absolute path, it is returned as the result.  Otherwise,
+  both `FROM` must be a relative path and the result will be a relative
+  path.
 
 * `$(call _traverse,CF,CC,ROOTS)`
 
-  Traverse a graph, starting at root nodes ROOTS, returning a list of nodes
-  ordered such that each parent precedes all its children.
+  Traverse a graph, starting at root nodes `ROOTS`, returning a list of
+  nodes ordered such that each parent precedes all its children.
 
   `CF` = name of a function to get children of a node
   `CC` = a context value to pass to `CF`
@@ -761,7 +771,8 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 * `$(call _shell,COMMAND)`
 
   Return `$(shell COMMAND)`, identifying this as a dependency, allowing to
-  rebuild rule cache files to be automatically when the COMMAND result changes.
+  rebuild rule cache files to be automatically when the `COMMAND` result
+  changes.
 
 * `$(call _var,VARNAME)`
 

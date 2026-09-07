@@ -4,7 +4,9 @@
 ;;
 ;; Property evaluation makes use of memoization and compilation:
 ;;    - Property definitions are compiled before evaluation (see _cx).
-;;    - Property compilation is memoized (per parents & property)
+;;    - Property compilation is memoized at two locations:
+;;        &C.P for first definition found for C
+;;        &CHP.P for definitions found via {inherit}
 ;;    - Property evaluation is memoized (per instance & property)
 ;;
 
@@ -12,220 +14,9 @@
 (require "export.scm")
 (require "base.scm")
 
-(export-text "# objects.scm")
 
-
-;; Return the class portion of an instance name, or nil if ID is a
-;; valid file name instead.
-;;
-(define (_idC id)
-  &native
-  (if (findstring "(" id)
-      (word 1 (subst "(" " " id))))
-
-(export (native-name _idC) 1)
-
-
-;; True when ID -- which must be an instance -- has an invalid class name.
-;;
-(define (_isClassInvalid id)
-  &public
-  &native
-  (undefined? (.. (_idC id) ".inherit")))
-
-(export (native-name _isClassInvalid) 1)
-
-
-;; Parent lists: a parent list is a list of zero or more classes that
-;; describe an "inheritance scope".  Each class implies all the classes it
-;; inherits, so parent lists have more than one item only when multiple
-;; inheritance is encountered.
-
-
-;; Return the next parent list "up" in the inheritance search space.  This
-;; replaces the first class in the list with its inherited classes.
-;;
-(define (_pup parents)
-  &native
-  ;; Here filter-out removes the first name in PARENTS and stips extraneous
-  ;; spaces from the result.
-  (filter-out
-   "&%" (.. (native-var (.. (word 1 parents) ".inherit")) " &" parents)))
-
-(export (native-name _pup) 1)
-
-
-;; Return the nearest ancestor parent list in which P is defined by the
-;; first named class.  Return nil if there is no definition.
-;;
-(define (_walk parents p)
-  &native
-  (define `C1 (word 1 parents))
-  (if parents
-      (if (defined? (.. C1 "." p))
-          parents
-          (_walk (_pup parents) p))))
-
-(export (native-name _walk) nil)
-
-
-(define (_hasProperty p id)
-  &native
-  (if (or (defined? (.. id "." p))
-          (_walk (filter-out " |%" (subst "(" " |" id)) p))
-      1))
-
-(export (native-name _hasProperty) nil)
-
-
-;; Construct an E1 (undefined property) error message
-;;
-;; WHO = referrer.  One of:
-;;   &&OBJ => {PROP} in a property defn, where &OBJ is its compilation
-;;   ^PARENTS => {inherit} in property definition (source) VAR
-;;   OTHER => $(call .,PROP,OTHER)  ($0 of calling context)
-;;
-(define `(e1-msg who prop class id)
-  ;; Recover a source variable from a compiled variable &OBJ or &&OBJ.
-  ;; Compilations may be stored in two locations: &PARENTS.P and &C.P
-  (define `src-var
-    (if (filter "&%" who)
-        (foreach (who-prop (lastword (subst "." " " who)))
-          (.. (word 1 (_walk (word 1 (subst "." " " "&" " " who)) who-prop))
-              "." who-prop))
-        (if (filter "^%" who)
-            (.. (subst "^" "" (word 1 who)) "." prop)
-            who)))
-
-  (define `who-desc
-    (cond
-     ;; {inherit}
-     ((filter "^%" who) " from {inherit} in")
-     ;; {prop}
-     ((filter "&&%" who) (.. " from {" prop "} in"))
-     ;; $(call .,P,$0)
-     (else " during evaluation of")))
-
-  (define `cause
-    (cond
-     ((undefined? (.. class ".inherit"))
-      (.. ";\n" class " is not a valid class name "
-          "(" class ".inherit is not defined)"))
-     (who
-      (.. who-desc ":\n" (_describeVar src-var)))))
-
-  (.. "Undefined property '" prop "' for " id
-      " was referenced" cause "\n"))
-
-
-;; Report error: undefined property
-;;
-(define (_E1 _ p who)
-  &native
-  (_error (e1-msg who p _class _self)))
-
-(export (native-name _E1) 1)
-
-
-;; cap-memo holds a previously computed value of C(A).P.  This is accessed
-;; using (native-value ...), so special characters in the variable name
-;; should not be a concern.
-;;
-(define `(cap-memo p)
-  (.. "~" _self "." p))
-
-
-;; Compile a definition of P in the scope defined by PARENTS; return the
-;; name of the variable holding the result.
-;;
-;; PARENTS = a parent list describing an inheritance scope at which a
-;;     property definition has been found, or C(A) when IS-CAP is true.
-;;     In other words, SRC-VAR (see below) *must* be defined.
-;;
-;; WHO = who referenced the property (see e1-msg)
-;;
-;; IS-CAP => the definition is an instance property.  In this case, we need
-;;      to take extra precautions to ensure that OUT-VAR contains no ")",
-;;      and treat PARENTS as an instance name and not a valid parent list.
-;;
-(define (_cx parents p who ?is-cap)
-  &native
-  (define `src-var (.. (word 1 parents) "." p))
-  (define `memo-var (.. "&" parents "." p))
-  ;; OUT-VAR may not contain `)` because it will be expanded with `call`.
-  ;;   Accidental use of `=` in a variable name is unlikely for obvious
-  ;;   reasons so we don't guard against `:`-before-`=`.
-  ;; OUT-VAR == MEMO-VAR except in the CAP case, wherein we don't care about
-  ;;   MEMO-VAR because CAP-MEMO (see `.`) will cache the final result.
-  (define `out-var (if is-cap (subst ")" "]" (cap-memo p)) memo-var))
-  (define `inherit-var
-    (_cx (_walk (if is-cap _class (_pup parents)) p)
-         p
-         (.. "^" parents)))
-
-  (define `obj
-    (foreach (src-var src-var)
-      (define `src
-        (native-value src-var))
-      (if (simple? src-var)
-          (subst "$" "$$" (native-value src-var))
-          (subst "{inherit}" (if (findstring "{inherit}" src)
-                                 (.. "$(call " inherit-var ")"))
-                 "{" "$(call .,"
-                 "}" ",&$0)"
-                 src))))
-
-  (if parents
-      (if (native-value memo-var)
-          memo-var
-          (_fset out-var obj))
-      (_E1 parents p who)))
-
-(export (native-name _cx) nil)
-
-
-;; Return the name of the variable that holds the compilation of C[A].P
-;;
-(define (.& p who)
-  &native
-  (define `I.P (.. _self "." p))
-  (define `&C.P (.. "&" _class "." p))
-
-  (if (defined? I.P)
-      (_cx _self p who 1)
-      (if (defined? &C.P)
-          &C.P
-          (_fset &C.P (native-value (_cx (_walk _class p) p who))))))
-
-(export (native-name .&) 1)
-
-
-;; Evaluate property P for current instance (given by dynamic _class and A)
-;; and cache the result.
-;;
-;; WHO = requesting variable
-;;
-;; Performance notes:
-;;  * memoization avoids exponential times
-;;  * C(A).P value hit rate is about 50% for med-to-large projects
-;;  * &C.P hit rate approaches 100% in large projects
-;;  * We cannot directly "call" variables with ")" in their name, due
-;;    to a quirk of Make.
-;;
-(define (. p ?who)
-  &native
-  (if (simple? (cap-memo p))
-      (native-value (cap-memo p))
-      (_set (cap-memo p) (native-call (.& p who)))))
-
-(export (native-name .) nil)
-
-
-;; Extract the class name from I, where I contains at least one "(".  Return
-;; nil if I begins with "(" or does not end with ")".
-;;
-(define `(extractClass)
-  (subst "|" "" (word 1 (subst "(" " | " (filter "%)" _self)))))
+(define `(func-defined? name)
+  (filter "r%" (native-flavor name)))
 
 
 ;; Report error: mal-formed instance name
@@ -241,11 +32,13 @@
 
   (_error (.. "Mal-formed target '" _self "'; " reason)))
 
-(export (native-name _E0) 1)
 
-
-;; Return the class of an ID: CLASS for CLASS(ARGS), "_File" for others.
-;; Report an error if the ID is mal-formed.
+;; Validate ID and return its class.
+;;
+;; If ID is a well-formed instance -- CLASS(..) -- return CLASS.
+;; If ID is a plain file name -- no "(" or ")" -- return "_File(ID)".
+;; If ID is mal-formed -- has no "(", does not end in ")", or CLASS is empty,
+;;   report an error.
 ;;
 (define `(idClass id)
   (if (findstring "(" id)
@@ -254,7 +47,6 @@
       (if (findstring ")" id)
           (_E0)
           "_File")))
-
 
 (let-global ((_error "-"))
   (expect (idClass "f") "_File")
@@ -265,6 +57,268 @@
   (expect (idClass "Ca)b") "-")
   (expect (idClass "C(a)b") "-"))
 
+
+;; Return the class portion of a well-formed instance, or nil if ID contains
+;; no "(".
+;;
+(define (_idC id)
+  &native
+  (if (findstring "(" id)
+      (word 1 (subst "(" " " id))))
+
+
+;; True when ID -- which must be an instance -- has an invalid class name.
+;;
+(define (_isClassInvalid id)
+  &public
+  &native
+  (undefined? (.. (_idC id) ".inherit")))
+
+
+;; Chain positions (CHP): a chain position describes the state of iteration
+;; through the inheritance chain.  It is a list of zero or more classes, or
+;; a single instance name.  Chain positions are single words (the current
+;; class) unless multiple inheritance is encountered.
+;;
+;;  (word 1 CHP) = current class
+;;  (_chp+ CHP) = next CHP in inheritance chain; nil => done
+;;
+
+;; Return the next chain position in the inheritance search space.
+;;
+(define (_chp+ chp)
+  &native
+  ;; Here filter-out removes the first name in CHP and stips extraneous
+  ;; spaces from the result.
+  (if (filter "%)" chp)
+      (_idC chp)
+      (filter-out
+       "&%" (.. (native-var (.. (word 1 chp) ".inherit")) " &" chp))))
+
+
+;; Return find the first definition of P in CHP.  The result might be CHP or
+;; some ancestor of CHP, or nil if there is no definition.
+;;
+(define (_walk p chp)
+  &native
+  (define `C1 (word 1 chp))
+  (if chp
+      (if (defined? (.. C1 "." p))
+          chp
+          (_walk p (_chp+ chp)))))
+
+
+(define (_hasProperty p id)
+  &native
+  (if (or (defined? (.. id "." p))
+          (_walk p (filter-out " |%" (subst "(" " |" id))))
+      1))
+
+
+;; Construct an E1 (undefined property) error message.
+;;
+;; PROP = the property that was not found
+;; SITE & CALLER identify one of the two ways in which E1 might be called:
+;;  1) From `_cx`, during compilation of an `{inherit}` constrict
+;;        SITE = source function for definition
+;;        CALLER = nil
+;;  2) From `.` at "run time"; CALLER = $0 of caller of `.` (if supplied)
+;;        SITE = nil
+;;        CALLER is one of:
+;;          &C.P : function memoized at class level
+;;          &CHP.P : function memoized at CHP level (after processing inherit)
+;;          &I.P : function generated for instance property definition
+;;          other : whatever user passed to `.`
+;;
+(define `(e1-msg prop caller site)
+  ;; extract source variable in case of "&..." caller
+  (define `caller-prop (lastword (subst "." ". " caller)))
+  (define `caller-class (patsubst "&%" "%" (word 1 (subst "." " ." caller))))
+  (define `caller-src (.. (word 1 (_walk caller-prop caller-class)) "." caller-prop))
+
+  ;; If PROP differs from SITE, then {inherit PROP} was used.
+  (define `inherit-arg (if (findstring (.. "." prop "=") (.. site "=")) "" (.. " " prop)))
+
+  ;; original definition (source) variable that referenced PROP
+  (define `src-var
+    (cond (site site)
+          ((filter "&%" caller) caller-src)
+          (else caller)))
+
+  (define `src-type
+    (cond (site (.. " by {inherit" inherit-arg "} in"))
+          (caller " from")))
+
+  (define `src-desc
+    (if (or site caller)
+        (.. ":\n" (_describeVar src-var "   "))))
+
+  (.. "Undefined property {" prop "} for " _self
+      " was referenced" src-type src-desc
+      ;; point out potentially bogus class
+      (if (undefined? (.. _class ".inherit"))
+          (.. "\n NOTE: " _class ".inherit is not defined!\n"))))
+
+
+;; _E1: display undefined property error and throw error
+;;
+(define (_E1 p caller site)
+  &native
+  (_error (e1-msg p caller site)))
+
+
+(define `(ewalk p chp caller ?site)
+  (or (_walk p chp)
+      (_E1 p caller site)))
+
+
+(declare (_cxMemo p chp) &native)
+
+
+;; Compile an inherited property definition, returning the memoized object
+;; function name.
+;;
+;; P = property to compile
+;; CHP = chain position *above which* we will search
+;; SRC-VAR = the property definition inheriting P
+;;
+(define (_cxInherit p chp src-var)
+  &native
+  (_cxMemo p (ewalk p (_chp+ chp) nil src-var)))
+
+
+;; See _cxDef.
+;;
+(define (_cxTok tokens p chp src-var)
+  &native
+
+  (define `(iprop tok)
+    (if (filter "{inherit}" tok)
+        p
+        (patsubst "{inherit!0%}" "%" tok)))
+
+  ;; expand {inherit} and {inherit NAME} expressions
+  (define `stage1
+    (if (findstring "{inherit" tokens)
+        (foreach (tok tokens)
+          (if (filter "{inherit} {inherit!0%}" tok)
+              (.. "$(call!0"
+                  (subst " " "!0" (_cxInherit (iprop tok) chp src-var))
+                  ")")
+              tok))
+        tokens))
+
+  ;; expand {PROP} expressions
+  (patsubst "{%}" "$(call!0.,%,$0)" stage1))
+
+
+;; Compile a property definition, returning a function body.
+;;
+;; SRC = text of function definition
+;; P = name of property being compiled
+;; CHP = chain position at which SRC-VAR was found
+;; SRC-VAR = variable from which SRC was obtained
+;;
+(define `(cxDefn src p chp src-var)
+  ;; convert string to list of tokens for parsing {WORD} expressions
+  (define `(tokenize src)
+    (subst "{" " {"
+           "}" "} "
+           "(" " ( "
+           ")" " ) "
+           "," " , "
+           "!0" "!0 "
+           "{inherit!0 " "{inherit!0"
+           (demote src)))
+
+  (define `(untokenize tokens)
+    (promote (subst " " "" tokens)))
+
+  (if (findstring "{" src)
+      (untokenize (_cxTok (tokenize src) p chp src-var))
+      src))
+
+
+(let-global ((_cxInherit
+              (lambda (p chp sv)
+                (.. "&" chp "Base." p))))
+
+  (expect "$(call .,FOO,$0)" (cxDefn "{FOO}" "P" "CC" "CC.P"))
+  (expect "$(call &CCBase.P)" (cxDefn "{inherit}" "P" "CC" "CC.P"))
+  (expect "$(call &CCBase.X)" (cxDefn "{inherit X}" "P" "CC" "CC.P"))
+  (expect " { FOO }  {(} {a)} " (cxDefn " { FOO }  {(} {a)} " "P" "CC" "CC.I")))
+
+
+;; Compile a Minion property definition, returning a function body.
+;;
+;; P = property name
+;; CHP = a chain position at which a property definition has been found.
+;;
+(define (_cx p chp)
+  &native
+  ;; performant var binding
+  (foreach (src-var (.. (word 1 chp) "." p))
+    (define `src
+      (native-value src-var))
+    (if (simple? src-var)
+        (subst "$" "$$" src)
+        (cxDefn src p chp src-var))))
+
+
+(define (_cxMemo p chp)
+  &native
+  (define `memo-var (.. "&" chp "." p))
+  (if (func-defined? memo-var)
+      memo-var
+      (_fset memo-var (_cx p chp))))
+
+
+;; Return the name of the memo variable for C(A).P.  This is accessed using
+;; (native-value ...), so special characters in the variable name should not
+;; be a concern.
+(define `(cap-memo p)
+  (.. "~" _self "." p))
+
+
+;; Evaluate property P for current instance (given by dynamic _class and A)
+;; and cache the result.
+;;
+;; CALLER = the function/variable that is calling `.`
+;;
+;; Performance notes:
+;;  * memoization avoids exponential times
+;;  * C(A).P value memo hit rate is about 50% for med-to-large projects
+;;  * &C.P memo hit rate approaches 100% in large projects
+;;  * We cannot directly "call" variables with ")" in their name, due
+;;    to a quirk of Make.
+;;
+(define (. p ?caller)
+  &native
+
+  (define `I.P (.. _self "." p))
+  (define `&C.P (.. "&" _class "." p))
+
+  (define `value
+    (if (defined? I.P)
+        ;; directly expand without writing I.P definition to var
+        (foreach (dollar0 (.. "&" I.P))
+          (native-call "or" (_cx p _self)))
+        ;; memoize compilation at C.P
+        (native-call (if (func-defined? &C.P)
+                         &C.P
+                         (_fset &C.P (_cx p (ewalk p _class caller)))))))
+
+  (if (simple? (cap-memo p))
+      (native-value (cap-memo p))
+      (_set (cap-memo p) value)))
+
+
+;; Evaluate property for one or more IDs (instances or plain file
+;; names). Result is all property values, space-delimited, one per ID.
+;;
+;; If an ID is a plain file, treat it as `_File(ID)`.
+;; If an ID is mal-formed, report the mal-formed instance and error.
+;;
 (define (get p ids)
   &public
   &native
@@ -272,9 +326,6 @@
     (foreach (_class (idClass _self))
       (. p))))
 
-
-;; Override automatic variable names to _self and _class for dynamic binding
-(export (native-name get) nil "_self _class")
 
 (define `argText
   &public
@@ -284,183 +335,216 @@
   &native
   argText)
 (declare _argText &native) ;; re-define so it can be referenced as a variable
-(export (native-name _argText) nil)
 
 (define (_args)
   &native
   (_hashGet (_argHash argText)))
 (declare _args &native)
-(export (native-name _args) nil)
 
 (define (_arg1)
   &native
   (word 1 _args))
 (declare _arg1 &native)
-(export (native-name _arg1) nil)
 
 (define (_namedArgs key)
   &native
   (_hashGet (_argHash argText) key))
-(export (native-name _namedArgs) 1)
 
 (define (_namedArg1 key)
   &native
   (word 1 (_namedArgs key)))
-(export (native-name _namedArg1) 1)
 
 ;;--------------------------------
 ;; describeDefn
 ;;--------------------------------
 
-;; Like `_pup`, but also handles initial "C(A)" -> "C" inheritance step.
+;; Like `_chp+`, but also handles initial "C(A)" -> "C" inheritance step.
 ;;
-(define `(pup0 id-or-parents)
-  (or (_idC id-or-parents)
-      (_pup id-or-parents)))
+(define `(pup0 id-or-chp)
+  (or (_idC id-or-chp)
+      (_chp+ id-or-chp)))
 
 
-(define (_describeProp parents prop)
+(define (_describeProp chp prop)
   &native
   (define `(recur)
-    (_describeProp (pup0 parents) prop))
+    (_describeProp (pup0 chp) prop))
 
   (define `C1.P
-    (.. (word 1 parents) "." prop))
+    (.. (word 1 chp) "." prop))
 
   (define `has-inherit
     (and (recursive? C1.P)
          (findstring "{inherit}" (native-value C1.P))))
 
-  (if parents
+  (if chp
       (if (undefined? C1.P)
           (recur)
           (.. (_describeVar C1.P "   ")
               (if has-inherit
                   (.. "\n\n...wherein {inherit} references:\n\n" (recur)))))))
 
-(export (native-name _describeProp) nil)
 
-
-(define (_chain parents ?seen)
+;; Return inheritance chain (a list of all the classes that will be
+;; searched, in order) for CHP (zero or more classes).
+;;
+(define (_chain chp ?seen)
   &native
-  (if parents
-      (_chain (_pup parents) (._. seen (word 1 parents)))
+  (if chp
+      (_chain (_chp+ chp) (._. seen (word 1 chp)))
       (strip seen)))
 
-(export (native-name _chain) nil)
 
-
-;; Detect (as best as we can) what context we are in
+;; Warn when a Make automatic variable is evaluatied.
 ;;
-;; FN = name of function (e.g. $0 during evaluation of a variable)
-(define (_whereAmI fn)
+;; AUTO = auto var: "@", "<", or "^"
+;; FN = $0 at time of reference
+;;
+(define (_badAuto auto fn)
   &native
 
-  (define `(q str) (.. "'" str "'"))
-  (.. "during evaluation of "
-      (if (filter "~%" fn)
-          ;; compiled C(A).P function
-          (q (patsubst "~%" "%" (subst "]" ")" fn)))
-          (.. (if (filter "&%" fn)
-                  ;; "&PARENTS.P"
-                  (q (patsubst "&%" "%" fn))
-                  ;; some other function
-                  (.. "$(" fn ")"))
-              (patsubst "%" " in context of %" _self)))))
+  (define `where
+    (if (filter "&%" fn)
+        ;; "&CHP.P"
+        (word 1 (patsubst "&%" "%" fn))
+        ;; some other function
+        (.. "$(call " fn ",...)")))
 
-(export (native-name _whereAmI) 1)
+  (_error (.. "$$" auto " was evaluated prior to rule processing\n"
+              "during evaluation of " where (if _self (.. " in context of " _self)))))
+
+
+;;--------------------------------
+;; Exports
+;;--------------------------------
+
+
+(export-text "# objects.scm")
+(export (native-name _E0) 1)
+(export (native-name _idC) 1)
+(export (native-name _isClassInvalid) 1)
+(export (native-name _chp+) 1)
+(export (native-name _walk) nil)
+(export (native-name _hasProperty) nil)
+(export (native-name _E1) 1)
+(export (native-name _cxInherit) nil)
+(export (native-name _cxTok) 1)
+(export (native-name _cx) nil)
+(export (native-name _cxMemo) nil)
+(export (native-name .) nil "0")
+(export (native-name get) nil "_self _class")
+(export (native-name _argText) nil)
+(export (native-name _args) nil)
+(export (native-name _arg1) nil)
+(export (native-name _namedArgs) 1)
+(export (native-name _namedArg1) 1)
+(export (native-name _describeProp) nil)
+(export (native-name _chain) nil)
+(export (native-name _badAuto) nil)
+
 
 ;;--------------------------------
 ;; Tests
 ;;--------------------------------
 
 (set-native-fn "A.inherit" "")
-(set-native-fn "B1.inherit" "A")
-(set-native-fn "B2.inherit" "A")
-(set-native-fn "C.inherit" "B1 B2")
+(set-native-fn "A.class" "$(_class)")
+(set-native-fn "A.self"  "$(_self)")
+(set-native-fn "A.y" "Y")
+(set-native-fn "A.ia" "A.ia")
 
-(set-native-fn "A.x" "<A.x:$(_class)>")
-(set-native-fn "A.y" "<A.y>")
-(set-native    "A.i" " (A.i) ")
-(set-native-fn "B1.y" "<B1.y>")
-(set-native-fn "B1.y2" "<B1.y2>")
-(set-native-fn "B2.y" "<B2.y>")
+(set-native-fn "Mixin.inherit" "")
+(set-native-fn "Mixin.m" "Mixin.m")
+(set-native-fn "Mixin.icm" "Mixin.icm + {inherit}")
+
+(set-native-fn "B.inherit" "A")
+(set-native-fn "B.icm" "B.icm")
+(set-native-fn "B.m" "B.m + {inherit}")
+(set-native-fn "B.y" "B.y")
+
+(set-native-fn "C.inherit" "Mixin B")
 (set-native-fn "C.z" "<C.z>")
-(set-native-fn "C.i" "<C.i:{inherit}>")        ;; recursive w/ {inherit}
-(set-native    "C(a).s" "<C(a).s:$(_class)($(_argText)){x}>")  ;; simple
-(set-native    "C(X(f)).s" "<C(X(f)).s>")      ;; simple
-(set-native-fn "C(a).r" "<C(a).r:$(_class)($(_argText))>")     ;; recursive
-(set-native-fn "C(a).p" "<C(a).p:{x}>")        ;; recursive w/ prop
-(set-native-fn "C(a).i" "<C(a).i:{inherit}>")  ;; recursive w/ {inherit}
+(set-native-fn "C.icm" "C.icm + {inherit}")
+(set-native-fn "C.iname" "C.iname + {inherit m}")
 
-;; _walk
-(expect (_walk "C" "z") "C")
-(expect (_walk "C" "y") "B1 B2")
-(expect (_walk "C" "x") "A B2")
-(expect (_walk "C" "un") nil)
-(expect (_walk "XX B2" "i") "A")
+(set-native    "C(a).s" "C(a).s:$0 $$ {x}")        ;; simple instance prop
+(set-native-fn "C(a).r" "C(a).r:$0 $$ {class}")    ;; recursive instance prop
+(set-native-fn "C(a).ia" "C(a).ia + {inherit}")    ;; recursive w/ {inherit}
+(set-native-fn "C(a).icm" "C(a).icm + {inherit}")  ;; recursive w/ {inherit}
+
+
+;; _chain, chp+, _walk
+(expect (_chain "C(a)") "C(a) C Mixin B A")
+(expect (_chp+ "C") "Mixin B")
+(expect (_chp+ "Mixin B") "B")
+(expect (_walk "z" "C") "C")
+(expect (_walk "m" "C") "Mixin B")
 
 ;; _hasProperty
-(expect (_hasProperty "p" "C(a)") 1)
-(expect (_hasProperty "x" "C(a)") 1)
+(expect (_hasProperty "m" "C(a)") 1)
 (expect (_hasProperty "un" "C(a)") nil)
 
-;; _chain
-(expect (_chain "C") "C B1 A B2 A")
 
-;; E1 "who" logic
-(expect 1 (see "not a valid class" (e1-msg nil nil "CX" "a")))
-(expect 1 (see "from {x} in:\nC.z =" (e1-msg "&&C.z" "x" "C" "a")))
-(expect 1 (see "from {x} in:\nB1.y =" (e1-msg "&&C.y" "x" "C" "a")))
-(expect 1 (see "from {x} in:\nB1.y =" (e1-msg "&&B1 B2.y" "x" "C" "a")))
-(expect 1 (see "from {inherit} in:\nA.x =" (e1-msg "^A B" "x" "C" "a")))
-(expect 1 (see "during evaluation of:\n_cx =" (e1-msg "_cx" "x" "C" "a")))
+;; get, `.`
 
-(let-global ((_self "C(a)")
-             (_class "C"))
+;; instance property
+(expect (get "r" "C(a)") "C(a).r:&C(a).r $ C")  ;; no extra expansion
+(expect (native-flavor "~C(a).r") "simple")
+;; note: native-var will not work only because of GNU Make mis-parsing
+;; the $(VAR) expression when VAR contains parens.
+(expect (native-value "~C(a).r") "C(a).r:&C(a).r $ C")  ;; memo saved
+(set-native "~C(a).r" "-") ;; swap memo
+(expect (get "r" "C(a)") "-")  ;; memo is used
 
-  ;; .&
+;; *simple* instance property
+(expect (get "s" "C(a)")  "C(a).s:$0 $$ {x}")       ;; no extra expansion
 
-  (define `(test.& prop name-out value-out)
-    (expect (.& prop nil) name-out)
-    (expect (native-call name-out) value-out))
+;; class property
+(expect (get "z" "C(a)") "<C.z>")
+(expect (native-flavor "&C.z") "recursive")
+(expect (native-value "&C.z") "<C.z>")
+(set-native-fn "&C.z" "ZAP")
+(expect (get "z" "C(b)") "ZAP")  ;; C(a).z is value-cached...
 
-  (test.& "x" "&C.x" "<A.x:C>")                  ;; no CAP
-  (test.& "z" "&C.z" "<C.z>")
-  (test.& "y" "&C.y" "<B1.y>")
-  (test.& "y2" "&C.y2" "<B1.y2>")
-  (test.& "s" "~C(a].s" "<C(a).s:$(_class)($(_argText)){x}>")     ;; simple CAP
-  (test.& "r" "~C(a].r" "<C(a).r:C(a)>")          ;; recursive CAP
-  (test.& "p" "~C(a].p" "<C(a).p:<A.x:C>>")       ;; recursive CAP + {prop}
-  (test.& "i" "~C(a].i" "<C(a).i:<C.i: (A.i) >>") ;; recursive CAP + {inh}
+;; base class property
+(expect (get "y" "C(a)") "B.y")
+(expect (native-value "&C.y") "B.y")  ;; populates memo at class level
 
-  ;; .
+;; {inherit} from instance property
+(expect (get "ia" "C(a)") "C(a).ia + A.ia")
+(expect (native-value "&A.ia") "A.ia")
 
-  (expect (. "x") "<A.x:C>")
-  (expect (native-value (cap-memo "x")) "<A.x:C>")
-  (expect (. "x") "<A.x:C>")  ;; again (after caching)
-  (let-global ((_self "C(X(f))"))
-    (expect (. "s" nil) "<C(X(f)).s>"))           ;; challenging ARG?
+;; {inherit} from instance property defined in complex CHP
+(begin
+  (get "icm" "C(a)")
+  (expect (native-value "&C.icm") "C.icm + $(call &Mixin B.icm)")
+  (expect (native-value "&C.icm") "C.icm + $(call &Mixin B.icm)")
+  (expect (native-value "&Mixin B.icm") "Mixin.icm + $(call &B.icm)")
+  (expect (get "icm" "C(a)") "C(a).icm + C.icm + Mixin.icm + B.icm"))
 
-  nil)
+;; {inherit} from a class property w/ complex CHP
+(expect (get "iname" "C(a)") "C.iname + Mixin.m")
+(expect (native-value "&C.iname") "C.iname + $(call &Mixin B.m)")
+(expect (native-value "&Mixin B.m") "Mixin.m")
 
+;; _File(PLAIN) defaulting ... note _self does *not* reflect _File(xxx), but
+;; that only affects the _File class itself.  $(_argText) seems to reflect
+;; PLAIN.
 (set-native-fn "_File.id" "$(_class)($(_argText))")
-(expect (get "x" "C(a)") "<A.x:C>")
 (expect (get "id" "f") "_File(f)")
 
-;; caching of &C.P
 
-(expect "<A.x:$(_class)>" (native-value "&C.x"))   ;; assert: memo var was set
-(set-native-fn "&C.x" "NEW")
-(expect (get "x" "C(b)") "NEW")             ;; assert: uses memo
+;; _E0 errors
 
-;; error reporting
+(define (xsee a b)
+  (or (see a b)
+      (print "*** Did not see '" a "' in '" b "'")))
 
 (define `(expect-error expr value error-content)
   (let-global ((_error logError)
                (*errorLog* nil))
     (expect expr value)
-    (expect 1 (see error-content (first *errorLog*)))))
+    (expect 1 (xsee error-content (first *errorLog*)))))
 
 (expect-error (get "p" "(a)") nil
                "'(a)'; no CLASS")
@@ -474,49 +558,76 @@
 (expect-error (get "p" "Ca)") nil
               "'Ca)'; unbalanced ')'")
 
-(expect-error (get "asdf" "C(a)") nil
-              "Undefined")
+;; _E1 errors
+
+;; _e1-msg caller/site descriptions
+(let-global ((_self "C(a)")
+             (_class "C"))
+  ;; site
+  (expect 1 (see (.. "Undefined property {y} for C(a) was referenced "
+                     "by {inherit} in:\n   A.y = Y")
+                 (e1-msg "y" nil "A.y")))
+  ;; caller is &C.P memo of C.P
+  (expect 1 (see "from:\n   C.z =" (e1-msg "p" "&C.z" nil)))
+  ;; caller is &C.P memo of inherited prop
+  (expect 1 (see "{p} for C(a) was referenced from:\n   B.y =" (e1-msg "p" "&C.y" nil)))
+  ;; caller is complex &CHP.P
+  (expect 1 (see "from:\n   Mixin.m =" (e1-msg "p" "&Mixin B.m" nil)))
+  ;; caller is &I.P
+  (expect 1 (see "from:\n   C(a).r =" (e1-msg "p" "C(a).r" nil)))
+  ;; caller is OTHER
+  (expect 1 (see "from:\n   _shell =" (e1-msg "p" "_shell" nil)))
+  ;; bad class?
+  (let-global ((_class "CX"))
+    (expect 1 (see "CX.inherit is not defined" (e1-msg "p" "foo" nil)))))
+
+(expect-error (get "unk" "C(a)") nil
+              "Undefined property {unk} for C(a)")
 
 (set-native-fn "C.e1" "{inherit}")
 (expect-error (get "e1" "C(a)") nil
-              (.. "Undefined property 'e1' for C(a) was referenced "
-                  "from {inherit} in:\nC.e1 = {inherit}"))
+              (.. "Undefined property {e1} for C(a) was referenced "
+                  "by {inherit} in:\n   C.e1 = {inherit}"))
 
-(set-native-fn "C(a).e2" "{inherit}")
+(set-native-fn "C(a).e2" "{inherit UNK}")
 (expect-error (get "e2" "C(a)") nil
-              (.. "Undefined property 'e2' for C(a) was referenced from "
-                  "{inherit} in:\nC(a).e2 = {inherit}"))
+              (.. "Undefined property {UNK} for C(a) was referenced by "
+                  "{inherit UNK} in:\n   C(a).e2 = {inherit UNK}"))
 
 (set-native-fn "C.eu" "{undef}")
 (expect-error (get "eu" "C(a)") nil
-              (.. "Undefined property 'undef' for C(a) was referenced "
-                  "from {undef} in:\nC.eu = {undef}"))
+              (.. "Undefined property {undef} for C(a) was referenced from:\n"
+                  "   C.eu = {undef}"))
 
 ;; _describeProp
 
-(expect (_describeProp "C(a)" "i")
-        (.. "   C(a).i = <C(a).i:{inherit}>\n"
+(expect (_describeProp "C(a)" "icm")
+        (.. "   C(a).icm = C(a).icm + {inherit}\n"
             "\n"
             "...wherein {inherit} references:\n"
             "\n"
-            "   C.i = <C.i:{inherit}>\n"
+            "   C.icm = C.icm + {inherit}\n"
             "\n"
             "...wherein {inherit} references:\n"
             "\n"
-            "   A.i :=  (A.i) "))
+            "   Mixin.icm = Mixin.icm + {inherit}\n"
+            "\n"
+            "...wherein {inherit} references:\n"
+            "\n"
+            "   B.icm = B.icm"))
 
 (expect (_describeProp "UNDEF(a)" "foo") "")
 
-;; _whereAmI
-(set-native-fn "C(a).w0" "$(call _whereAmI,$0)")
-(set-native-fn "C.w1" "$(call _whereAmI,$0)")
-(set-native-fn "C.w2" "$(call _whereAmI,foo)")
+;; _badAuto
+(set-native-fn "BA" "$(call _badAuto,@,$0)")
+(set-native-fn "C(a).w0" "$(BA)")
+(set-native-fn "C.w1" "$(BA)")
+(set-native-fn "C.w2" "$(call BA)")
 
-(expect (get "w0" "C(a)")
-        "during evaluation of 'C(a).w0'")
-(expect (get "w1" "C(a)")
-        "during evaluation of 'C.w1' in context of C(a)")
-(expect (get "w2" "C(a)")
-        "during evaluation of $(foo) in context of C(a)")
-(expect (_whereAmI "foo")
-        "during evaluation of $(foo)")
+(expect-error (get "w0" "C(a)") nil
+              (.. "$$@ was evaluated prior to rule processing\nduring "
+                  "evaluation of C(a).w0 in context of C(a)"))
+(expect-error (get "w1" "C(a)") nil
+              "evaluation of C.w1 in context of C(a)")
+(expect-error (get "w2" "C(a)") nil
+              "evaluation of $(call BA,...) in context of C(a)")
