@@ -408,9 +408,18 @@ _printf = printf "%b" $(call _shellQuote,$(_printfEsc))
 _qvn = $(if $(findstring $(\n),$1),$(subst $(\n),$(\n)  | ,$(\n)$1),$2$1$2)
 _qv = $(call _qvn,$1,')#'
 
-# $(call _?,FN,ARGS..): same as $(call FN,ARGS..), but logs args & result.
+# $(call _?,FN,ARGS..) : same as $(call FN,ARGS..), but logs args & result.
 _? = $(call __?,$$(call $1,$2,$3,$4,$5),$(call $1,$2,$3,$4,$5))
+# $(call __?,VALUE) print & return VALUE
 __? = $(info $1 -> $(call _qvn,$2))$2
+# $(call _0?)  -->  "(fn 'arg1' 'arg2' ...)"
+_0? = ($0 $(call _argListDesc,$1,$2,$3,$4,$5,$6,$7,$8,$9))
+_argListDesc = $(if $1$2$3$4$5$6$7$8$9, '$1'$(call _argListDesc,$2,$3,$4,$5,$6,$7,$8,$9))
+_trace = $(foreach f,$1,$(eval $f = $$(call __?,$$(_0?),$(value $f))))
+
+# $(call __?,VALUE)      : instrument a value
+# $(call _0?)            : (fn args...)
+# $(call _?,FN,ARGS..): same as $(call FN,ARGS..), but logs args & result.
 
 # $(call _log,VALUE,NAME): Output "NAME: VALUE" when NAME matches the
 #   pattern in `$(minionDebug)`.
@@ -564,6 +573,9 @@ _forceTarget := $(OUTDIR)FORCE
 $(_forceTarget):
 
 define _epilogue
+  # instrument functions before calling any of them
+  $(call _trace,$(minionTrace))
+
   # Flag some potential OUTDIR misconfigurations that could be costly
   ifneq "/" "$(patsubst %/,/,$(OUTDIR))"
     $(error OUTDIR must end in "/")
@@ -576,7 +588,7 @@ define _epilogue
   __modeKey := $(word 1,$(MAKECMDGOALS))
   __modeArgs := $(wordlist 2,999999,$(MAKECMDGOALS))
 
-  ifneq "" "$(filter $$%,$(__modeKey))"
+  ifneq "" "$(filter $$%,$(MAKECMDGOALS))"
     # Expression mode expects a Make expression that may have embedded
     # spaces.  MAKECMDGOALS may not reflect the actual arguments.
     $$%: ; @#$(info $$$* = $(call _qv,$(call or,$$$*)))
@@ -601,7 +613,7 @@ define _epilogue
     # the cache when handling `help` (goals may conflict with cached rules,
     # because they take on a new meaning) or `clean` (so we can recover from
     # a corrupted cache file).
-  else ifneq "" "$(filter c%,$(foreach v,$(_minionStartVars),$(origin $v)))"
+  else ifneq "" "$(filter c%,$(foreach v,$(filter-out V,$(_minionStartVars)),$(origin $v)))"
     # Avoid cache: a command-line override was used
   else
     # Use a rule cache file. Recipe expansion is costly, so defer it to rule
