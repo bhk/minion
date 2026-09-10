@@ -535,8 +535,9 @@ used, resulting in consistency problems:
      to detect changes and rebuild the cache when necessary.
 
      Command-line variable assignments -- e.g. `make all CC.flags=-W` -- are
-     *not* a concern, however, because Minion disables caching whenever they
-     are present.
+     *not* a concern, however, because Minion bypasses the cache whenever
+     they are present, except for a few that cannot cause consistency
+     problems (`V`, `minionCache`, and `minionNoCache`).
 
 If you have a limited number of instances that depend on these external
 variables, you can selectively exclude those instances from caching.  This

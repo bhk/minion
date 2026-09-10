@@ -32,7 +32,7 @@ Write.inherit ?= _Write
 
 
 #--------------------------------
-# Unprefixed Variables
+# Supported customization variables
 #--------------------------------
 
 # V defaults to the first word of Variants.all
@@ -44,27 +44,10 @@ OUTDIR ?= .out/
 # Build products for the current V are placed here
 VOUTDIR ?= $(OUTDIR)$(if $V,$V/)
 
-minionCache ?=
-minionNoCache ?=
 minionStart ?=
 
-# Character constants
-
-\s := $(if ,, )
-\t := $(if ,,	)
-\H := \#
-[[ := {
-]] := }
-[ := (
-] := )
-; := ,
-\q = "#"
-define \n
-
-
-endef
-# This character may not appear in `command` values, except via _lazy.
-\e = 
+minionCache ?=
+minionNoCache ?=
 
 
 #--------------------------------
@@ -396,8 +379,33 @@ _CleanGoal.inIDs = Clean($(_argText))
 
 
 #--------------------------------
-# Function definitions
+# Internal function and variable definitions
 #--------------------------------
+
+# External changes to these variables do not threaten consistency.  V is in
+# the cache file name; the cache file itself detects changes to the others.
+_cacheOKVars ?= V minionCache minionNoCache
+_cacheName ?= $(VOUTDIR)cache.mk
+# write out this many rules per printf command line
+_cacheGroupSize ?= 40
+
+# Character constants
+
+\s := $(if ,, )
+\t := $(if ,,	)
+\H := \#
+[[ := {
+]] := }
+[ := (
+] := )
+; := ,
+\q = "#"
+define \n
+
+
+endef
+# This character may not appear in `command` values, except via _lazy.
+\e = 
 
 _eq? = $(findstring $(subst x$1,1,x$2),1)
 _shellQuote = '$(subst ','\'',$1)'#'  (comment to fix font coloring)
@@ -454,9 +462,6 @@ _lazy = $(subst $$,$(\e),$1)
 # Indent recipe lines and escape them for rule-phase expansion.  Un-escape
 #    _lazy encoding to enable late (rule phase) evaulation.
 _recipe = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))))
-
-# write out this many rules per printf command line
-_cacheGroupSize ?= 40
 
 
 #--------------------------------
@@ -609,17 +614,17 @@ define _epilogue
   ifndef minionCache
     # No caching selected by Makefile
   else ifeq "" "$(strip $(call get,needs,$(filter-out _CleanGoal$[%,$(_goalIDs))))"
-    # Avoid cache: Trivial goals do not benefit, and importantly, we avoid
+    # Bypass cache: Trivial goals do not benefit, and importantly, we avoid
     # the cache when handling `help` (goals may conflict with cached rules,
     # because they take on a new meaning) or `clean` (so we can recover from
     # a corrupted cache file).
-  else ifneq "" "$(filter c%,$(foreach v,$(filter-out V,$(_minionStartVars)),$(origin $v)))"
-    # Avoid cache: a command-line override was used
+  else ifneq "" "$(filter c%,$(foreach v,$(filter-out $(_cacheOKVars),$(_minionStartVars)),$(origin $v)))"
+    # Bypass cache: a command-line override was used
   else
     # Use a rule cache file. Recipe expansion is costly, so defer it to rule
     # processing time, only when-and-if the cache needs to be built.
-    $(VOUTDIR)cache.mk : $(MAKEFILE_LIST) ; $(call _rulecacheRecipe,$@)
-    -include $(VOUTDIR)cache.mk
+    $(_cacheName): $(MAKEFILE_LIST) ; $(call _rulecacheRecipe,$@)
+    -include $(_cacheName)
     # The following line only has an effect when the rule cache does not
     # exist yet.  In that case, it avoids rule generation, because we know
     # Make will immediately restart, and that would be wasted work.
