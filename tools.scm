@@ -3,11 +3,8 @@
 ;;----------------------------------------------------------------
 
 (require "core")
-(require "export.scm")
 (require "base.scm")
 (require "objects.scm")
-
-(export-text "# tools.scm")
 
 
 ;;----------------------------------------------------------------
@@ -36,8 +33,6 @@
       inferred
       ids))
 
-(export (native-name _inferIDs) nil)
-
 (set-native "IC(a.c).out" "out/a.o")
 (set-native "IP(a.o).out" "out/P/a")
 (set-native "IP(IC(a.c)).out" "out/IP_IC/a")
@@ -60,14 +55,12 @@
 ;;
 (define (_depsOf id)
   &native
-  (define `memoVar (.. "_&deps-" id))
+  (define `memo-var (needs-memo-var id))
   (define `xdeps
     (sort (foreach (i (isInstance (get "needs" id)))
             (._. i (_depsOf i)))))
-  (or (native-value memoVar)
-      (_set memoVar (or xdeps " "))))
-
-(export (native-name _depsOf) nil)
+  (or (native-value memo-var)
+      (_set memo-var (or xdeps " "))))
 
 
 ;; Return IDS and their transitive dependencies, excluding non-instances.
@@ -78,8 +71,6 @@
    (foreach (i (isInstance ids))
      (._. i (_depsOf i)))))
 
-(export (native-name _rollup) 1)
-
 
 ;; Return IDS and their transitive dependencies that are instances,
 ;; excluding those listed in EXCLUDES.  For instances that are in EXCLUDES,
@@ -88,14 +79,11 @@
 ;;
 (define (_rollupEx ids excludes ?seen)
   &native
-  (define `(cachedNeeds id)
-    (native-value (.. "_" id "_needs")))
-
   (define `deps
     (sort
      (._. (isInstance (get "needs" (filter-out excludes ids)))
           (foreach (i (filter excludes ids))
-            (cachedNeeds i)))))
+            (native-value (rulecache-needs-var i))))))
 
   (if ids
       (_rollupEx (filter-out (._. seen ids) deps)
@@ -103,7 +91,6 @@
                  (._. seen ids))
       (filter-out excludes seen)))
 
-(export (native-name _rollupEx) nil)
 
 ;; Test _depsOf, _rollup, _rollupEx
 (set-native "R(a).needs" "R(b) R(c) x y z")
@@ -124,7 +111,7 @@
 (expect (strip (_rollupEx "R(a)" "R(d)"))
         "R(a) R(b) R(c)")
 
-(set-native "_R(d)_needs" "R(x)")
+(set-native (rulecache-needs-var "R(d)") "R(x)")
 (set-native "R(x).needs" "")
 
 (expect (strip (_rollupEx "R(a)" "R(d)"))
@@ -150,7 +137,6 @@
                               (.. "../" to))))
               to))))
 
-(export (native-name _relpath) nil)
 
 (expect (_relpath "a/b/c" "/x") "/x")
 (expect (_relpath "a" "x/y") "x/y")
@@ -194,9 +180,6 @@
     (subst D0 " "
            D1 D
            groups)))
-
-(export (native-name _group) nil)
-(export (native-name _ungroup) nil)
 
 (expect (_group "a | c d e f g h" 3)
         "a|0|1|0c d|0e|0f g|0h|0")
@@ -379,10 +362,6 @@
 
   nil)
 
-(export (native-name _graph) nil)
-(export (native-name _traverse) nil)
-(export (native-name _graphDeps) nil)
-
 ;;----------------------------------------------------------------
 ;; _uniq
 ;;----------------------------------------------------------------
@@ -406,9 +385,6 @@
 (define (_unique list)
   &native
   (strip (punquote (_uniqQ (pquote list)))))
-
-(export (native-name _uniqQ) nil)
-(export (native-name _unique) nil)
 
 (expect (_unique "a b a c a b c c") "a b c")
 (expect (_unique "a b % ^ a b % ^") "a b % ^")
@@ -456,7 +432,7 @@
     (foreach (i (_ungroup group))
       (.. "\n" (get "rule" i)
           (if excludedIDs
-              (.. "\n_" i "_needs = "
+              (.. "\n" (rulecache-needs-var i) " = "
                   (filter excludedIDs (_depsOf i))))
           "\n")))
 
@@ -510,10 +486,3 @@
 
   (print "Updating Minion cache...")
   (_rcr2 cacheFile includes excludes _cacheGroupSize))
-
-
-(export (native-name _rulecacheRecipe) nil)
-(export (native-name _rcr2) nil)
-(export (native-name _varToIDs) 1)
-(export (native-name _checkValue) 1)
-(export (native-name _qesc) 1)

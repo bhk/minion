@@ -156,8 +156,8 @@ $(call _expectEQ,\
   R(a) R(b) R(c))
 
 
-_R(d)_needs = R(x)
-R(x).needs=
+(R(d).needs) = R(x)# rule cache needs variable
+R(x).needs =
 
 $(call _expectEQ,\
   $(strip $(call _rollupEx,R(a),R(d))),\

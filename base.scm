@@ -6,12 +6,10 @@
 (require "export.scm")
 
 ;;--------------------------------
-;; Symbols defined in minion.mk, not exported from Scam-compiled code.
+;; Symbols not exported to .mk; minion.mk preamble provides these
 ;;--------------------------------
 
 ;; Defined in minion.mk: \\n \\H [ ] [[ ]] OUTDIR
-
-(export-text "# base.scm")
 
 (define VOUTDIR
   &public
@@ -35,9 +33,23 @@
 (declare _self &native &public)
 (declare _class &native &public)
 
+(export-exclude "_self" "_class")
+
 ;;--------------------------------
-;; Exported symbols
+;; Internal and exports functions, macros
 ;;--------------------------------
+
+;; Construct variable names for memoizaton keys and for the rule cache.
+;; Memo values are accessed via `native-value` or `native-call`, so many
+;; special characters (e.g. spaces) are okay.
+;;
+(define `(value-memo-var id) &public (.. "~" id))
+(define `(cx-memo-var func) &public (.. "&" func))
+(define `(hash-memo-var hash) &public (.. "*h" hash))
+(define `(needs-memo-var id) &public (.. "*n" id))
+(define `(rulecache-needs-var id) &public (.. "(" id ".needs)"))
+
+(define `cx-memo-pat &public (cx-memo-var "%"))
 
 ;; Return non-nil if VAR has been assigned a value.
 ;;
@@ -69,8 +81,6 @@
   &public
   (error msg))
 
-(export (native-name _error) 1)
-
 
 (declare *errorLog* &native &public)
 
@@ -94,8 +104,6 @@
   &native
   (isInstance id))
 
-(export (native-name _isInstance) 1)
-
 
 ;; If ID is an indirection (@GROUP, CLASS@GROUP, C1@C2@GROUP, ...) return
 ;; it unmodified.
@@ -105,8 +113,6 @@
   &native
   (if (findstring "@" id)
       (filter-out "%)" id)))
-
-(export (native-name _isIndirect) 1)
 
 
 ;; Return the alias instance if NAME is a variable name.
@@ -120,9 +126,6 @@
 (define (_isAlias name)
   &native
   (isAlias name))
-
-
-(export (native-name _isAlias) 1)
 
 
 ;; If goal NAME is a Minion goal (alias, instance, or indirection), then
@@ -148,8 +151,6 @@
       (.. "_BuildGoal(" name ")")
       (_isAlias name)))
 
-(export (native-name _buildGoalID) 1)
-
 
 ;; Assign a simple variable named NAME to VALUE; return VALUE.
 ;;
@@ -165,7 +166,6 @@
   (native-eval "$1 := $2")
   value)
 
-(export (native-name _set) 1)
 
 (begin
   (define `(test key value)
@@ -241,11 +241,6 @@
   (expect "VBAR VFOO" varLog))
 
 
-(export (native-name _wildcard) 1)
-(export (native-name _shell) 1)
-(export (native-name _var) 1)
-
-
 ;; Return the variable portion of indirection ID.  Return nil if the ID ends
 ;; in @.
 ;;
@@ -254,8 +249,6 @@
 (define (_ivar id)
   &native
   (filter-out "%@" (subst "@" "@ " id)))
-
-(export (native-name _ivar) 1)
 
 
 (define (_EI id where)
@@ -271,8 +264,6 @@
             (if (filter "_BuildGoal(%" where)
                 "command line goal"
                 where))))))
-
-(export (native-name _EI) 1)
 
 
 ;; WHERE = where LIST came from, e.g. "C(A).P or variable name
@@ -306,8 +297,6 @@
             (or (isAlias w)
                 w)))))
 
-(export (native-name _expandX) nil)
-
 
 ;; Expand indirections in LIST, and translate bare alias names to instances.
 ;;
@@ -317,8 +306,6 @@
   &native
   &public
   (_expandX list (.. _self "." prop)))
-
-(export (native-name _expand) nil)
 
 
 (begin
@@ -388,19 +375,15 @@
   (test "test_f" "echo '#-> x'")
   (test "test_f" "a\\b\\\\c\\#\\"))
 
-(export (native-name _fset) 1)
-
 ;; Return value of VAR, evaluating it only the first time.
 ;;
 (define (_once var)
   &native
-  (define `cacheVar (.. "_o~" var))
+  (define `cacheVar (.. "!o~" var))
 
   (if (undefined? cacheVar)
       (_set cacheVar (native-var var))
       (native-value cacheVar)))
-
-(export (native-name _once) nil)
 
 (begin
   ;; test _once
@@ -424,8 +407,6 @@
        (if (native-var "C")
            (.. "during evaluation of "
                (native-var "C") "(" (native-var "A") ")")))))
-
-(export (native-name _argError) 1)
 
 
 ;; Protect special characters that occur between balanced brackets.
@@ -458,8 +439,6 @@
           (_argGroup e arg))
       arg))
 
-(export (native-name _argGroup) nil)
-
 
 ;; Construct a hash from an argument.  Check for balanced-ness in
 ;; brackets.  Protect ":" and "," when nested within brackets.
@@ -478,7 +457,9 @@
     (foreach (w (subst "`," " " (_argGroup (escape arg))))
       (.. (if (findstring "`:" w) "" ":") w))))
 
-(export (native-name _argHash2) 1)
+
+;; this is not recursive, but it calls a recursive function
+(export-varcall "_argHash2" 1)
 
 
 ;; Construct a hash from an instance argument.
@@ -486,15 +467,13 @@
 (define (_argHash arg)
   &public
   &native
-  (define `memo-var (.. "_h~" arg))
+  (define `memo-var (hash-memo-var arg))
 
   (if (or (findstring "(" arg) (findstring ")" arg) (findstring ":" arg))
       (or (native-value memo-var)
           (_set memo-var (_argHash2 arg)))
       ;; common, fast case
       (.. ":" (subst "," " :" arg))))
-
-(export (native-name _argHash) 1)
 
 
 (expect (_argHash "a:b:c,d:e,f,g") "a:b:c d:e :f :g")
@@ -521,8 +500,6 @@
   (define `pat (.. key ":%"))
   (patsubst pat "%" (filter pat hash)))
 
-(export (native-name _hashGet) nil)
-
 
 (expect (_hashGet ":a :b x:y" "") "a b")
 (expect (_hashGet ":a :b x:y" "x") "y")
@@ -540,8 +517,6 @@
                      (.. "define " name "\n" (native-value name) "\nendef"))
               (.. name " = " (native-value name)))
           (.. name " := " (subst "$" "$$" "\n" "$(\\n)" (native-value name))))))
-
-(export (native-name _describeVar) nil)
 
 (begin
   (set-native "sv-s" "a\nb$")

@@ -1,12 +1,9 @@
 (require "core")
-(require "export.scm")
 (require "base.scm")
 
 ;;----------------------------------------------------------------
 ;; Output file defaults
 ;;----------------------------------------------------------------
-
-(export-text "# outputs.scm")
 
 ;; The chief requirement for output file names is that conflicts must be
 ;; avoided.  Avoiding conflicts is complicated by the inference feature, which
@@ -111,8 +108,6 @@
          "}" "@R"
          str))
 
-(export (native-name _fsenc) 1)
-
 
 ;; Encode the directory portion of path with fsenc characters
 ;; Result begins and ends with "/".
@@ -204,10 +199,6 @@
   (if (filter arg1 arg)
       (_outBS class arg outExt file)
       (_outBC class arg outExt file arg1)))
-
-(export (native-name _outBX) 1)
-(export (native-name _outBS) 1)
-(export (native-name _outBasis) 1)
 
 
 (begin

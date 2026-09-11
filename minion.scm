@@ -20,7 +20,8 @@ endif
 
 (define (main argv)
   (define `o (first argv))
-  (define `output (.. (get-exports) "\n" tail))
+  (define `output (.. (extract-exports) "\n" tail))
+
   (if o
       (write-file o output)
       (print output)))

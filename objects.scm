@@ -93,7 +93,7 @@
   (if (filter "%)" chp)
       (_idC chp)
       (filter-out
-       "&%" (.. (native-var (.. (word 1 chp) ".inherit")) " &" chp))))
+       "=%" (.. (native-var (.. (word 1 chp) ".inherit")) " =" chp))))
 
 
 ;; Return find the first definition of P in CHP.  The result might be CHP or
@@ -133,7 +133,7 @@
 (define `(e1-msg prop caller site)
   ;; extract source variable in case of "&..." caller
   (define `caller-prop (lastword (subst "." ". " caller)))
-  (define `caller-class (patsubst "&%" "%" (word 1 (subst "." " ." caller))))
+  (define `caller-class (patsubst cx-memo-pat "%" (word 1 (subst "." " ." caller))))
   (define `caller-src (.. (word 1 (_walk caller-prop caller-class)) "." caller-prop))
 
   ;; If PROP differs from SITE, then {inherit PROP} was used.
@@ -142,7 +142,7 @@
   ;; original definition (source) variable that referenced PROP
   (define `src-var
     (cond (site site)
-          ((filter "&%" caller) caller-src)
+          ((filter cx-memo-pat caller) caller-src)
           (else caller)))
 
   (define `src-type
@@ -267,17 +267,10 @@
 
 (define (_cxMemo p chp)
   &native
-  (define `memo-var (.. "&" chp "." p))
+  (define `memo-var (cx-memo-var (.. chp "." p)))
   (if (func-defined? memo-var)
       memo-var
       (_fset memo-var (_cx p chp))))
-
-
-;; Return the name of the memo variable for C(A).P.  This is accessed using
-;; (native-value ...), so special characters in the variable name should not
-;; be a concern.
-(define `(cap-memo p)
-  (.. "~" _self "." p))
 
 
 ;; Evaluate property P for current instance (given by dynamic _class and A)
@@ -287,8 +280,8 @@
 ;;
 ;; Performance notes:
 ;;  * memoization avoids exponential times
-;;  * C(A).P value memo hit rate is about 50% for med-to-large projects
-;;  * &C.P memo hit rate approaches 100% in large projects
+;;  * Value memo hit rate is about 50% for med-to-large projects
+;;  * CX memo hit rate approaches 100% in large projects
 ;;  * We cannot directly "call" variables with ")" in their name, due
 ;;    to a quirk of Make.
 ;;
@@ -296,21 +289,22 @@
   &native
 
   (define `I.P (.. _self "." p))
-  (define `&C.P (.. "&" _class "." p))
+  (define `value-var (value-memo-var I.P))
+  (define `cx-var (cx-memo-var (.. _class "." p)))
 
   (define `value
     (if (defined? I.P)
         ;; directly expand without writing I.P definition to var
-        (foreach (dollar0 (.. "&" I.P))
+        (foreach (dollar0 (cx-memo-var I.P))
           (native-call "or" (_cx p _self)))
         ;; memoize compilation at C.P
-        (native-call (if (func-defined? &C.P)
-                         &C.P
-                         (_fset &C.P (_cx p (ewalk p _class caller)))))))
+        (native-call (if (func-defined? cx-var)
+                         cx-var
+                         (_fset cx-var (_cx p (ewalk p _class caller)))))))
 
-  (if (simple? (cap-memo p))
-      (native-value (cap-memo p))
-      (_set (cap-memo p) value)))
+  (if (simple? value-var)
+      (native-value value-var)
+      (_set value-var value)))
 
 
 ;; Evaluate property for one or more IDs (instances or plain file
@@ -404,9 +398,9 @@
   &native
 
   (define `where
-    (if (filter "&%" fn)
-        ;; "&CHP.P"
-        (word 1 (patsubst "&%" "%" fn))
+    (if (filter cx-memo-pat fn)
+        ;; compiled function
+        (word 1 (patsubst cx-memo-pat "%" fn))
         ;; some other function
         (.. "$(call " fn ",...)")))
 
@@ -418,30 +412,8 @@
 ;; Exports
 ;;--------------------------------
 
-
-(export-text "# objects.scm")
-(export (native-name _E0) 1)
-(export (native-name _idC) 1)
-(export (native-name _isClassInvalid) 1)
-(export (native-name _chp+) 1)
-(export (native-name _walk) nil)
-(export (native-name _hasProperty) nil)
-(export (native-name _E1) 1)
-(export (native-name _cxInherit) nil)
-(export (native-name _cxTok) 1)
-(export (native-name _cx) nil)
-(export (native-name _cxMemo) nil)
-(export (native-name .) nil "0")
-(export (native-name get) nil "_self _class")
-(export (native-name _argText) nil)
-(export (native-name _args) nil)
-(export (native-name _arg1) nil)
-(export (native-name _namedArgs) 1)
-(export (native-name _namedArg1) 1)
-(export (native-name _describeProp) nil)
-(export (native-name _chain) nil)
-(export (native-name _badAuto) nil)
-
+(export-modify-foreach "." "0")
+(export-modify-foreach "get" "_self _class")
 
 ;;--------------------------------
 ;; Tests
@@ -532,7 +504,7 @@
 ;; PLAIN.
 (set-native-fn "_File.id" "$(_class)($(_argText))")
 (expect (get "id" "f") "_File(f)")
-
+(export-exclude "_File.id")
 
 ;; _E0 errors
 
