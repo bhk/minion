@@ -6,6 +6,7 @@
 (require "export.scm")
 
 (require "base.scm")
+(require "diag.scm")
 (require "objects.scm")
 (require "tools.scm")
 (require "outputs.scm")

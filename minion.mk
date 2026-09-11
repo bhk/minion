@@ -412,25 +412,6 @@ _shellQuote = '$(subst ','\'',$1)'#'  (comment to fix font coloring)
 _printfEsc = $(subst $(\n),\n,$(subst $(\t),\t,$(subst \,\\,$1)))
 _printf = printf "%b" $(call _shellQuote,$(_printfEsc))
 
-# Quote a (possibly multi-line) $1
-_qvn = $(if $(findstring $(\n),$1),$(subst $(\n),$(\n)  | ,$(\n)$1),$2$1$2)
-_qv = $(call _qvn,$1,')#'
-
-# $(call _?,FN,ARGS..) : same as $(call FN,ARGS..), but logs args & result.
-_? = $(call __?,$$(call $1,$2,$3,$4,$5),$(call $1,$2,$3,$4,$5))
-# $(call __?,VALUE) print & return VALUE
-__? = $(info $1 -> $(call _qvn,$2))$2
-
-# $(call _trace,FUNCTIONS) : instrument each function with tracing
-_trace = $(foreach f,$1,$(eval $f = $$(call __?,$$(_0?),$(value $f))))
-# $(call _0?)  -->  "(fn 'arg1' 'arg2' ...)"
-_0? = ($0 $(call _argListDesc,$1,$2,$3,$4,$5,$6,$7,$8,$9))
-_argListDesc = $(if $1$2$3$4$5$6$7$8$9, '$1'$(call _argListDesc,$2,$3,$4,$5,$6,$7,$8,$9))
-
-# $(call __?,VALUE)      : instrument a value
-# $(call _0?)            : (fn args...)
-# $(call _?,FN,ARGS..): same as $(call FN,ARGS..), but logs args & result.
-
 # $(call _log,VALUE,NAME): Output "NAME: VALUE" when NAME matches the
 #   pattern in `$(minionDebug)`.
 _log = $(if $(filter $(minionDebug),$2),$(info $2: $(call _qvn,$1)))
@@ -640,6 +621,7 @@ endef
 
 # SCAM source exports:
 . = $(if $(filter s%,$(flavor ~$(_self).$1)),$(value ~$(_self).$1),$(call _set,~$(_self).$1,$(if $(findstring s,$(flavor $(_self).$1)),$(foreach 0,&$(_self).$1,$(call or,$(call _cx,$1,$(_self)))),$(call $(if $(filter r%,$(flavor &$(_class).$1)),&$(_class).$1,$(call _fset,&$(_class).$1,$(call _cx,$1,$(or $(call _walk,$1,$(_class)),$(call _E1,$1,$2,)))))))))
+_? = $(_traceIn)$(call _traceOut,_? '$1',$(call $1,$2,$3,$4,$5,$6,$7,$8))
 _E0 = $(call _error,Mal-formed target '$(_self)'; $(if $(filter $[%,$(_self)),no CLASS before '$[',$(if $(findstring $[,$(_self)),no '$]' at end,unbalanced '$]')))
 _E1 = $(call _error,Undefined property {$1} for $(_self) was referenced$(if $3, by {inherit$(if $(findstring .$1=,$3=),, $1)} in,$(if $2, from))$(if $(or $3,$2),:$(\n)$(call _describeVar,$(if $3,$3,$(if $(filter &%,$2),$(word 1,$(call _walk,$(lastword $(subst .,. ,$2)),$(patsubst &%,%,$(word 1,$(subst ., .,$2))))).$(lastword $(subst .,. ,$2)),$2)),   ))$(if $(filter u%,$(flavor $(_class).inherit)),$(\n) NOTE: $(_class).inherit is not defined!$(\n)))
 _EI = $(call _error,$(if $(filter %@,$1),Invalid target (ends in '@'): $1,Indirection '$1' references undefined variable '$(_ivar)')$(if $2,$(\n)Found while expanding $(if $(filter _BuildGoal$[%,$2),command line goal,$2)))
@@ -674,6 +656,7 @@ _hasProperty = $(if $(or $(findstring s,$(flavor $2.$1)),$(call _walk,$1,$(filte
 _hashGet = $(patsubst $2:%,%,$(filter $2:%,$1))
 _idC = $(if $(findstring $[,$1),$(word 1,$(subst $[, ,$1)))
 _inferIDs = $(if $2,$(foreach w,$1,$(or $(filter %$],$(patsubst %$(or $(suffix $(if $(filter %$],$w),$(call get,out,$w),$w)),.),%($w),$2)),$w)),$1)
+_info = $(info $1)
 _isAlias = $(if $(filter f% o%,$(origin $1)),Alias($1))
 _isClassInvalid = $(filter u%,$(flavor $(_idC).inherit))
 _isIndirect = $(if $(findstring @,$1),$(filter-out %$],$1))
@@ -686,6 +669,8 @@ _outBS = $(_fsenc)$(if $(findstring %,$3),,$(suffix $4))$(if $4,$(patsubst _/$(V
 _outBX = $(subst @D,/,$(subst $(\s),,$(patsubst /%@_,_%@,$(addprefix /,$(subst @_,@_ ,$(_fsenc))))))
 _outBasis = $(if $(filter $5,$2),$(_outBS),$(call _outBS,$1$(subst _$(or $5,|),_|,_$2),$(or $5,out),$3,$4))
 _qesc = $(subst $(\n),$$($(\n)),$(subst \#,$$(\H),$(subst ",$$(\q),$(subst $$,$$$$,$1))))
+_qv = $(call _qvn,$1,')
+_qvn = $(if $(findstring $(\n),$1),$(subst $(\n),$(\n)$(_ti)  | ,$(\n)$1),$2$1$2)
 _rcr2 = @mkdir -p $(dir $1)$(\n)@> $1_tmp_$(\n)$(foreach w,$(call _group,$(filter-out $3,$2),$4),@$(call _printf,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)($x.needs) = $(filter $3,$(call _depsOf,$x)))$(\n))) >> $1_tmp_$(\n))@$(call _printf,_cachedIDs = $(filter-out $3,$2)$(\n)$(foreach w,minionCache minionNoCache $('varLog),$(call _checkValue,$1,$($w),$$($w)))$(if $('globLog),$(call _checkValue,$1,$(wildcard $('globLog)),$$(wildcard $('globLog))))$(foreach w,$('shellLog),$(call _checkValue,$1,$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w)))),$$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w))))))) >> $1_tmp_$(\n)@mv $1_tmp_ $1$(\n)
 _relpath = $(if $(filter /%,$2),$2,$(if $(filter ..,$(subst /, ,$1)),$(error _relpath: '..' in $1),$(or $(foreach w,$(filter %/%,$(word 1,$(subst /,/% ,$1))),$(call _relpath,$(patsubst $w,%,$1),$(if $(filter $w,$2),$(patsubst $w,%,$2),../$2))),$2)))
 _rollup = $(sort $(foreach w,$(filter %$],$1),$w $(call _depsOf,$w)))
@@ -693,6 +678,12 @@ _rollupEx = $(if $1,$(call _rollupEx,$(filter-out $3 $1,$(sort $(filter %$],$(ca
 _rulecacheRecipe = $(info Updating Minion cache...)$(call _rcr2,$1,$(call _rollup,$(call _varToIDs,minionCache)),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
 _set = $(eval $$1 := $$2)$2
 _shell = $(if $(call _set,'shellLog,$(sort $('shellLog) $(subst $(\s),!0,$(subst $(\t),!+,$(subst !,!1,$1))))),)$(shell $1)
+_ti = $(subst .,  ,$(*traceLevel*))
+_ti+ = $(eval *traceLevel* := .$(*traceLevel*))
+_ti- = $(eval *traceLevel* := $(patsubst %.,%,$(*traceLevel*)))
+_trace = $(foreach w,$1,$(call _info,_trace: $(if $(filter u%,$(flavor $w)),function $w not defined!,$(if $(findstring s,$(flavor TRACE*$w)),already traced $w,$(if $(filter $w,_traceIn _traceOut _qv _qvn _ti+ _ti- _ti),CANNOT trace $w,$(if $(call _fset,TRACE*$w,$(value $w)),)$(if $(call _fset,$w,$$(_traceIn)$$(call _traceOut,$$0,$$(call TRACE*$w,$$1,$$2,$$3,$$4,$$5,$$6,$$7,$$8,$$9))),)tracing $w ...)))))
+_traceIn = $(foreach w,$(or $(lastword $(foreach w,1 2 3 4 5 6 7 8 9,$(if $(value $w),$w))),0),$(if $(call _info,$(_ti)($(0)$(if $(filter 0,$w),, )$(foreach x,$(wordlist 1,$w,1 2 3 4 5 6 7 8 9),$(if $(findstring $(\n),$(value $x)),$$$x,'$(value $x)'))) ->),)$(if $(_ti+),)$(if $(foreach x,$(wordlist 1,$w,1 2 3 4 5 6 7 8 9),$(if $(findstring $(\n),$(value $x)),$(call _info,$(_ti)$$$x:$(call _qvn,$(value $x))))),))
+_traceOut = $(if $(_ti-),)$(if $(call _info,$(_ti)($1) <- $(call _qv,$2)),)$2
 _traverse = $(if $(word 1,$3),$(call _traverse,$1,$2,$(call $1,$2,$(word 1,$3)) $(wordlist 2,99999999,$3),$(filter-out $(word 1,$3),$4) $(word 1,$3)),$4)
 _ungroup = $(subst |1,|,$(subst |0, ,$1))
 _uniqQ = $(if $1,$(word 1,$1)   $(call _uniqQ,$(filter-out $(word 1,$1),$1)))
