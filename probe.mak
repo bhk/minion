@@ -213,23 +213,26 @@ endef
 
 
 # Funny encoding of backslashes that precede # !
-W := a\$(\H)\\$(\H)\\\$(\H)
-ifneq ($W,a\\\#\\\\\#\\\\\\\#)
+enc1 := a\$(\H)\\$(\H)\\\$(\H)
+ifneq ($(enc1),a\\\#\\\\\#\\\\\\\#)
   $(error FAILURE)
 endif
 
-V := $(\s)$(\t)\a\\b,$(\n)"c))(d\#e"
+enc2 := $(\s)$(\t)\a\\b,$(\n)"c))(d\#e"
 
 # Parenthesis encoding: needs to escape leading spaces, $, parens, #, \n
 #  
-ifneq ($V,  $(\s)	\a\\b,$(\n)"c$]$]$[d\#e")
+ifneq ($(enc2), $(\s)	\a\\b,$(\n)"c$]$]$[d\#e")
+  $(info A = '$(enc2)')
+  $(info B = ' $(\s)	\a\\b,$(\n)"c$]$]$[d\#e"')
   $(error FAILURE)
 endif
 
 # Double-quote encoding: need to escape $, ", #, \n
 #
-ifneq "$V" " 	\a\\b,$(\n)$(\q)c))(d\#e$(\q)"
+ifneq "$(enc2)" " 	\a\\b,$(\n)$(\q)c))(d\#e$(\q)"
   $(error FAIL)
 endif
 
 
+overrides: ; @echo MAKEOVERRIDES=$(MAKEOVERRIDES)
