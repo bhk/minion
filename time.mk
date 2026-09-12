@@ -2,35 +2,33 @@
 include test-utils.mk
 
 
-default = Work(10) xi xi2
+default =
+all = xi xi2
+
 
 #----------------------------------------------------------------
-# work:  A large fictional project for timing rule generation.
+# Evaluate as a Make expression the contents of a variable.
 #
-# Usage:
+#   $ export F1='$(words $(call _rollup,Project(100)))'
+#   $ time make -f time.mk 'Eval(F1)' 
+#   $ time make -f time.mk 'Eval(F1)' slowdownX100=_rollup
 #
-#   make -f time.mk 'Work(1)'
-#   make -f time.mk 'Work(10000)'
-#
-# Rule generation example timing (2023 MacBook Pro):
-#    30010 rules / 12 seconds = 2500 rules/sec
 
-getRules = $(foreach i,$1,$(call get,rule,$i))
+Eval.inherit = Phony
+Eval.var = $(_arg1)
+Eval.command = @echo '$(_self) -> "$(call or,$({var}))"'
+
 
 #----------------------------------------------------------------
-# Work(N,FN) : Compute rules for N fictional C files, and pass
-#   them to FN (default = 'eval').
+# Project(N) : a fictional project with N sources, exes, and tests.
+#   This cannot be built, but it can be used as for timing:
 #
-Work.inherit = Builder
-Work.in =
-Work.reps = $(or $(_arg1),1)
-Work.evalFn = $(or $(word 2,$(_args)),eval)
-Work.rootPatterns = WorkTest(WorkExe(CC(foo<N>.c)))
-Work.roots = $(foreach n,$(call _range,1,{reps}),$(subst <N>,$n,{rootPatterns}))
-Work.rollups = $(call _rollup,$(call _expand,{roots}))
-Work.rules = $(call getRules,{rollups})
-Work.doWork = $(call {evalFn},{rules})
-Work.command = @echo '$(words {rollups}) rules computed [{doWork}]'
+#   $ time make -f time.mk '$(words $(call _rollup,Project(100)))' slowdownX1001=_rollup
+#
+Project.inherit = Phony
+Project.reps = $(or $(_arg1),1)
+Project.rootPatterns = WorkTest(WorkExe(CC(foo<N>.c)))
+Project.in = $(foreach n,$(call _range,1,{reps}),$(subst <N>,$n,{rootPatterns}))
 
 WorkTest.inherit = Exec
 
@@ -42,6 +40,7 @@ workLibSrcs = a.c b.c c.c d.c e.c f.c g.c h.c i.c j.c
 
 CC++.optFlags = -Os
 CC++.warnFlags = -W -Wall
+
 
 #----------------------------------------------------------------
 # inspect: Detect command-line vars.
@@ -61,9 +60,8 @@ inspectVars = $(filter c%,$(foreach v,$(.VARIABLES),$(origin $v)))
 startVars := $(.VARIABLES)
 inspectVars2 = $(filter c%,$(foreach v,$(startVars),$(origin $v)))
 
-
 #----------------------------------------------------------------
 minionStart=1
-include $(or $(MINION),minion.mk)
+include $(or $(MINION),.out/minion.mk)
 $(_autoSlowdown)
 $(minionEnd)

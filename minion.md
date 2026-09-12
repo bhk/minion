@@ -695,11 +695,7 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
   Quote `STR` as an argument for /bin/sh or /bin/bash.
 
-* `$(call _printfEsc,STR)`
-
-  Escape `STR` for inclusion in a `printf` command line argument.
-
-* `$(call _printf,STR)`
+* `$(call _printfCmd,STR)`
 
   Return a shell command that writes `STR` to stdout.
 

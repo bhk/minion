@@ -47,9 +47,43 @@
 (define `(cx-memo-var func) &public (.. "&" func))
 (define `(hash-memo-var hash) &public (.. "*h" hash))
 (define `(needs-memo-var id) &public (.. "*n" id))
-(define `(rulecache-needs-var id) &public (.. "(" id ".needs)"))
+(define `(rulecache-needs-var id) &public (.. "*D-" id))
 
 (define `cx-memo-pat &public (cx-memo-var "%"))
+
+
+;; Use _info instead of info (SCAM print) for unit testing hook-ability.
+(define (_info text)
+  &native
+  &public
+  (print text))
+
+
+;; Use _eval instead of eval for easy debugging (e.g. minionTrace=_eval)
+;; DESC is just for diagnostic purposes.
+;;
+(define (_eval value ?desc)
+  &native
+  &public
+  (native-eval value))
+
+
+;; Display an error and halt.  We call this function, instead of `error`, so
+;; that is can be dynamically intercepted for testing purposes.
+;;
+(define (_error msg)
+  &native
+  &public
+  (error msg))
+
+
+;; Return 1 if A and B are the same.
+;;
+(define (_eq? a b)
+  &native
+  &public
+  (eq? a b))
+
 
 ;; Return non-nil if VAR has been assigned a value.
 ;;
@@ -73,21 +107,30 @@
   (filter "s%" (native-flavor var)))
 
 
-;; Display an error and halt.  We call this function, instead of `error`, so
-;; that is can be dynamically intercepted for testing purposes.
+;; Quote VALUE, surrounding with QUOT if it fits on a single-line, or
+;; indenting if it's multi-line.  Multi-line values will be prefixed with
+;; INDENT.
 ;;
-(define (_error msg)
+(define (_qvn value ?quot ?indent)
   &native
   &public
-  (error msg))
+  (if (findstring "\n" value)
+      (subst "\n" (.. "\n" indent "  | ") (.. "\n" value))
+      (.. quot value quot)))
 
 
-(declare *errorLog* &native &public)
-
-;; Append error message to list
-(define (logError msg)
+;; Call _qvn with "'" as QUOT
+;;
+(define (_qv value)
+  &native
   &public
-  (set *errorLog* (._. *errorLog* [msg])))
+  (_qvn value "'"))
+
+
+;; test _qv, _qvn
+(expect "a b" (_qvn "a b"))
+(expect "\n  | a\n  | b" (_qvn "a\nb"))
+(expect "'a b'" (_qv "a b"))
 
 
 ;; If ID is an instance, return it unmodified.
@@ -248,6 +291,7 @@
 ;;
 (define (_ivar id)
   &native
+  &public
   (filter-out "%@" (subst "@" "@ " id)))
 
 
@@ -306,29 +350,6 @@
   &native
   &public
   (_expandX list (.. _self "." prop)))
-
-
-(begin
-  ;; test _expand
-  (set-native-fn "ev0" "")
-  (set-native-fn "ev1" "a1 b1")
-  (set-native-fn "ev2" "a2 @ev1 c@ev1 c(@v) D@C@ev1 E@ev0")
-  (expect (_expand "E@ev0") "")
-  (expect (_expand "a @ev2")
-          "a a2 a1 b1 c(a1) c(b1) c(@v) D(C(a1)) D(C(b1))")
-
-  (let-global ((_error logError)
-               (*errorLog* nil)
-               (_self "C(A)"))
-    (expect "" (_expand "a@" "x"))
-    (expect "" (_expand "a@undef" "x"))
-    (expect 1 (see "Invalid target" (first *errorLog*)))
-    (expect 1 (see "Found while expanding C(A).x" (first *errorLog*)))
-    (expect 1 (see "undefined variable 'undef'" (nth 2 *errorLog*)))
-    (expect "minion.md minion.mk" (_expand "@minion.m*"))
-    nil)
-
-  nil)
 
 
 ;; Assign a recursive variable NAME, and return NAME.
@@ -529,3 +550,61 @@
                                             "P: a\n"
                                             "P: b\n"
                                             "P: endef")))
+
+
+;;--------------------------------
+;; Unit testing utilties
+;;--------------------------------
+
+
+;; _info
+
+(define *info* &public "")
+
+(define (hookInfo value)
+  (set *info* (.. *info* value "\n")))
+
+(define `(withInfoHook ...)
+  &public
+  (let-global ((*info* "")
+               (_info hookInfo))
+    ...))
+
+;; _error
+
+(define *error* &public "")
+
+(define (hookError msg)
+  (set *error* (._. *error* [msg])))
+
+(define `(withErrorHook ...)
+  &public
+  (let-global ((*error* "")
+               (_error hookError))
+    ...))
+
+
+;;--------------------------------
+;; More tests...
+;;--------------------------------
+
+
+;; test _expand
+
+(set-native-fn "ev0" "")
+(set-native-fn "ev1" "a1 b1")
+(set-native-fn "ev2" "a2 @ev1 c@ev1 c(@v) D@C@ev1 E@ev0")
+(expect (_expand "E@ev0") "")
+(expect (_expand "a @ev2")
+        "a a2 a1 b1 c(a1) c(b1) c(@v) D(C(a1)) D(C(b1))")
+
+(let-global ((_error hookError)
+             (*error* nil)
+             (_self "C(A)"))
+  (expect "" (_expand "a@" "x"))
+  (expect "" (_expand "a@undef" "x"))
+  (expect 1 (see "Invalid target" (first *error*)))
+  (expect 1 (see "Found while expanding C(A).x" (first *error*)))
+  (expect 1 (see "undefined variable 'undef'" (nth 2 *error*)))
+  (expect "minion.md minion.mk" (_expand "@minion.m*"))
+  nil)

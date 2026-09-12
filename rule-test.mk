@@ -62,7 +62,7 @@ endef
 
 Test(graph).in = Write(expected-graph)
 define Test(graph).exec
-  @{make} 'Graph(Echo(xxx))' > {@}.out $(call _!!, graph failed)
+  @minionTrace= {make} 'Graph(Echo(xxx))' > {@}.out $(call _!!, graph failed)
   @diff -u $(call get,out,Write(expected-graph)) {@}.out $(call _!!, does not match)
 endef
 

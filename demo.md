@@ -565,8 +565,8 @@ gcc -c -o .out/CCg.c/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .o
 #-> Sizes(CC(hello.c),CCg(hello.c))
 wc -c .out/CC.c/hello.o .out/CCg.c/hello.o
      744 .out/CC.c/hello.o
-    2112 .out/CCg.c/hello.o
-    2856 total
+    2120 .out/CCg.c/hello.o
+    2864 total
 
 ```
 
@@ -698,9 +698,9 @@ gcc -c -o .out/debug/CC.c/binsort.o binsort.c -std=c99 -g -Wall -Werror   -MMD -
 gcc -o .out/debug/CExe.c/binsort .out/debug/CC.c/binsort.o
 #-> Sizes(CExe@sources)
 wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
-   33656 .out/debug/CExe.c/hello
+   33672 .out/debug/CExe.c/hello
    33944 .out/debug/CExe.c/binsort
-   67600 total
+   67616 total
 
 ```
 ```console
@@ -724,9 +724,9 @@ wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
 $ make all-sizes       # sizes for *all* variants
 #-> Sizes(CExe@sources)
 wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
-   33656 .out/debug/CExe.c/hello
+   33672 .out/debug/CExe.c/hello
    33944 .out/debug/CExe.c/binsort
-   67600 total
+   67616 total
 #-> Sizes(CExe@sources)
 wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
    33432 .out/fast/CExe.c/hello

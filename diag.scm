@@ -2,10 +2,31 @@
 (require "base.scm")
 
 
-;; Use a function, not a primitive, so we can intercept it.
-(define (_info text)
+;;----------------------------------------------------------------
+;; _escape
+;;----------------------------------------------------------------
+
+;; Construct Make source code that expands to CONST, either on the RHS of a
+;; variable assignment or within a $(call ...) expression.  It is assumed
+;; that CONST does not contain '#' or newlines.
+;;
+(define (_escape const)
   &native
-  (print text))
+  (subst "$" "$$"
+         ")" "$]"
+         "(" "$["
+         "," "$;"
+         const))
+
+(set-native ";" ",")
+(expect "a$]$$x$;$;" (_escape "a)$x,,"))
+(expect "a)$x,," (native-call "or" (.. "$(if a," (_escape "a)$x,,") ",)")))
+
+
+;;----------------------------------------------------------------
+;; _info, _qv, _qvn
+;;----------------------------------------------------------------
+
 
 (define *traceLevel* &native "")
 
@@ -22,22 +43,16 @@
   (native-eval (.. "*traceLevel* := " (patsubst "%." "%" *traceLevel*))))
 
 
-;; Quote VALUE, surrounding with QUOT if it fits on a single-line, or
-;; indenting if it's multi-line.  Multi-line values will be indented in a
-;; tracing-aware manner.
+;; Quote value, with tracing-aware indentation.
 ;;
-(define (_qvn value ?quot)
+(define (_tqv value)
   &native
-  (if (findstring "\n" value)
-      (subst "\n" (.. "\n" (_ti) "  | ") (.. "\n" value))
-      (.. quot value quot)))
+  (_qvn value "'" (_ti)))
 
 
-;; Call _qvn with "'" as QUOT
-;;
-(define (_qv value)
-  &native
-  (_qvn value "'"))
+;;----------------------------------------------------------------
+;; _trace
+;;----------------------------------------------------------------
 
 
 ;; Log entry to traced function
@@ -61,7 +76,7 @@
     (_ti+)
     (foreach (a args)
       (if (findstring "\n" (native-value a))
-          (_info (.. (_ti) "$" a ":" (_qvn (native-value a))))))
+          (_info (.. (_ti) "$" a ":" (_tqv (native-value a))))))
     nil))
 
 ;; Log return from traced function FN returning VALUE
@@ -69,7 +84,7 @@
 (define (_traceOut fn value)
   &native
   (_ti-)
-  (_info (.. (_ti) "(" fn ") <- " (_qv value)))
+  (_info (.. (_ti) "(" fn ") <- " (_tqv value)))
   value)
 
 
@@ -88,7 +103,7 @@
     (define `status
       (cond ((undefined? v) (.. "function " v " not defined!"))
             ((defined? tv) (.. "already traced " v))
-            ((filter v "_traceIn _traceOut _qv _qvn _ti+ _ti- _ti")
+            ((filter v "_traceIn _traceOut _tqv _qv _qvn _ti+ _ti- _ti")
              (.. "CANNOT trace " v)) ;; circular; unending recursion
             (else
              (_fset tv (native-value v))
@@ -111,28 +126,12 @@
 ;; Tracing tests
 ;;----------------------------------------------------------------
 
-;; _qv, _qvn
-(expect "a b" (_qvn "a b"))
-(expect "\n  | a\n  | b" (_qvn "a\nb"))
-(expect "'a b'" (_qv "a b"))
-
-
-(define *info* "")
-
-(define (trapInfo value)
-  (set *info* (.. *info* value "\n")))
-
-(define `(withInfoTrap ...)
-  (let-global ((*info* "")
-               (_info trapInfo))
-    ...))
-
-(withInfoTrap
+(withInfoHook
  (expect "" (_traceIn 1 2 3))
  (expect *info* "(_traceIn '1' '2' '3') ->\n")
  (_ti-))
 
-(withInfoTrap
+(withInfoHook
  (expect "" (_traceIn 1 "a\nb" 3))
  (expect *info*
          (.. "(_traceIn '1' $2 '3') ->\n"
@@ -141,7 +140,7 @@
              "    | b\n"))
  (_ti-))
 
-(withInfoTrap
+(withInfoHook
  (expect "3 2 1" (_traceOut "f" "3 2 1"))
  (expect *info* "(f) <- '3 2 1'\n"))
 
@@ -154,7 +153,7 @@
 
 (expect 1 (traceTest 1))
 
-(withInfoTrap
+(withInfoHook
  (_trace "traceTest")
  (_trace "traceTest")
  (_trace "_ti+")
@@ -164,7 +163,7 @@
              "_trace: CANNOT trace _ti+\n"
              )))
 
-(withInfoTrap
+(withInfoHook
  (expect "$(_traceIn)$(call" (word 1 traceTest))
  (expect "$(if" (word 1 (native-value (traced-name "traceTest"))))
  (expect 1 (traceTest 1))
@@ -172,7 +171,7 @@
          (.. "(traceTest '1') ->\n"
              "(traceTest) <- '1'\n")))
 
-(withInfoTrap
+(withInfoHook
  (expect "1" (traceTest 1 2 3))
  (expect *info*
          (.. "(traceTest '1' '2' '3') ->\n"
@@ -182,7 +181,7 @@
              "  (traceTest) <- '2'\n"
              "(traceTest) <- '1'\n")))
 
-(withInfoTrap
+(withInfoHook
  (expect 0 (traceTest 0 "multi\nline\nvalue"))
  (expect *info*
          (.. "(traceTest '0' $2) ->\n"
@@ -201,7 +200,7 @@
              "    | value\n"
              "(traceTest) <- '0'\n")))
 
-(withInfoTrap
+(withInfoHook
  (expect "9" (_? "_hashGet" ":a b:9" "b"))
  (expect *info*
          (.. "(_? '_hashGet' ':a b:9' 'b') ->\n"

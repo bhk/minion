@@ -1,5 +1,5 @@
 ;;----------------------------------------------------------------
-;; Facililities for "exporting" functions to Minion
+;; Export functions from SCAM to Minion or Minion-based projects.
 ;;----------------------------------------------------------------
 
 (require "core")
@@ -23,26 +23,31 @@
 
 
 ;;----------------------------------------------------------------
-;; The ridiculous varcalls optimization!
+;; The ridiculous varcalls optimization...
 ;;
 ;; In GNU Make, calling a variable as a function is much like expanding that
 ;; variable.  The only difference is that calling the function binds
-;; arguments to $1, $2, etc. whereas $(NAME) sees the caller's arguments.
-;; As a result, $(NAME) will yield the same results as $(call
-;; NAME,$1,$2,...,$N), where N is the number of arguments used in NAME, but
-;; faster.  We can replace $(call NANE,...) expressions with $(NAME) except
-;; in the following cases:
+;; arguments to $1, $2, etc. whereas an expanded variable sees its caller's
+;; arguments.  As a result, $(NAME) will yield the same results as $(call
+;; NAME,$1,$2,...,$N), where N is the number of arguments used in NAME.  We
+;; can replace $(call NAME,...) expressions with $(NAME) except in the
+;; following cases:
 ;;
 ;;   a) If NAME is re-entrant, $(NAME) will trigger a fatal make error.
 ;;   b) If the call site does not pass enough arguments, NAME will see
 ;;      values other than nil for the unspecified arguments.
 ;;
-;; We allow the user to specify known-safe functions, but we try to infer
-;; the re-entrancy for almost all functions by examining their call
-;; expressions.  Any leaf function is re-entrant.  More generally, any
-;; function calling only known-safe functions is non-reentrant.  Since this
-;; definition is recursive, we repeat the analysis until the set of known
-;; safe functions stabilizes.
+;; We allow the user to specify functions known to be safe (non-reentrant),
+;; but we try to infer the re-entrancy for almost all functions by examining
+;; their call expressions.  Any leaf function is safe.  More generally, any
+;; function calling only known-safe functions is known to be safe.  Since
+;; this definition is recursive, we repeat the analysis until the set of
+;; known safe functions stabilizes.
+;;
+;; This pattern probably occurs infrequently unless code is crafted to
+;; exploit it.  So one might wonder... why?  Because it's slightly faster.
+;; This trick has yielded noticeable performance gains in the past when
+;; targeted to "hot" code.  And it's an example of performance art.
 ;;----------------------------------------------------------------
 
 
@@ -123,6 +128,7 @@
          "$(if ,,:,)" ":$;" ;; SCAM runtime -> Minionese
          "$(&)" "$&"        ;; smaller, isn't it?
          "$`" "$$"          ;; SCAM runtime -> Minionese
+         "\x1b" "$(\\e)"    ;; readability?
          code))
 
 
@@ -164,6 +170,29 @@
          "foo bar"))
 
 
+;; Return functions called by function NAME.
+;;
+(define (get-fn-deps name)
+  ;; ignore computed names
+  (filter-out "=% %$ or"
+              (subst "$(call!0" "$ "
+                     ")" " ="
+                     "," " ="
+                     "$" "$ ="
+                     (.. "=" [(native-value name)]))))
+
+
+;; Look for un-exported dependencies in exported functions.
+;;
+(define (check-fn-deps exports)
+  (foreach (f exports)
+    (define `unks (filter-out exports (get-fn-deps f)))
+    (when unks
+      (print (.. "\n*** Error: " f " calls: " (promote unks) "\n"))
+      (error "Unexported dependencies")))
+  exports)
+
+
 ;; Replace SCAM automatic variables with those listed in NAMES
 ;;
 (define (export-modify-foreach func names)
@@ -171,28 +200,33 @@
   (set-native-fn func (rename-foreach-vars (native-value func) names)))
 
 
-(define (assignment name code)
+;; Return Make code for assigning function NAME.
+;;
+(define (func-defn name code)
   (.. name " = " (subst "\n" "$(\\n)"
                         "#" "\\#"
                         code)))
 
 
+;; Return Make code ready for export to a Minion-based project.
+;;
 (define (extract-exports)
   &public
 
   ;; collect functions to be exported from the current environment
   (define `exported-funcs
-    (sort
-     (foreach (v (filter-out *export-excludes*
-                             (filter export-patterns
-                                     (native-value ".VARIABLES"))))
-       (if (filter "f%" (native-origin v))
-           v))))
+    (check-fn-deps
+     (sort
+      (foreach (v (filter-out *export-excludes*
+                              (filter export-patterns
+                                      (native-value ".VARIABLES"))))
+        (if (filter "f%" (native-origin v))
+            v)))))
 
   ;; generate body of Make code that defines these functions
   (define `scam-defns
     (foreach (name exported-funcs "\n")
-      (assignment name (native-value name))))
+      (func-defn name (native-value name))))
 
   ;; identify varcall optimization candidates
   (define `varsafe-funcs

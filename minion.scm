@@ -10,6 +10,7 @@
 (require "objects.scm")
 (require "tools.scm")
 (require "outputs.scm")
+(require "help.scm")
 
 (define `tail "
 ifndef minionStart

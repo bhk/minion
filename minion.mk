@@ -232,7 +232,7 @@ _GZip.outExt = %.gz
 #
 _Write.inherit = Builder
 _Write.out = $(or $(call _namedArg1,out),{inherit})
-_Write.command = @$(call _printf,{data}) > {@}
+_Write.command = @$(call _printfCmd,{data}) > {@}
 _Write.data = $(or $(call _namedArg1,data),$($(_arg1)))
 _Write.in =
 
@@ -394,6 +394,7 @@ _cacheGroupSize ?= 40
 \s := $(if ,, )
 \t := $(if ,,	)
 \H := \#
+\e := 
 [[ := {
 ]] := }
 [ := (
@@ -404,55 +405,13 @@ define \n
 
 
 endef
-# This character may not appear in `command` values, except via _lazy.
-\e = 
 
-_eq? = $(findstring $(subst x$1,1,x$2),1)
-_shellQuote = '$(subst ','\'',$1)'#'  (comment to fix font coloring)
-_printfEsc = $(subst $(\n),\n,$(subst $(\t),\t,$(subst \,\\,$1)))
-_printf = printf "%b" $(call _shellQuote,$(_printfEsc))
-
-# $(call _log,VALUE,NAME): Output "NAME: VALUE" when NAME matches the
-#   pattern in `$(minionDebug)`.
-_log = $(if $(filter $(minionDebug),$2),$(info $2: $(call _qvn,$1)))
-
-# $(call _eval,VALUE,NAME): Log + eval VALUE
-_eval = $(call _log,$1,EVAL:$2)$(eval $1)
-
-# $(call _evalRules,IDs,EXCLUDES) : Evaluate rules of IDs and their transitive dependencies
-_evalRules = $(foreach i,$(call _rollupEx,$(sort $(_isInstance)),$2),$(call _eval,$(call get,rule,$i),$i))
-
-# Construct Make source code that expands to $1, either on the RHS of a
-#   variable assignment or within a $(call ...) expression.  It is assumed
-#   that $1 does *not* contain '#' or newlines.
-_escape = $(subst $[,$$[,$(subst $],$$],$(subst $;,$$;,$(subst $$,$$$$,$1))))
 
 # Is $1 a "safe" arg to "rm -rf"?  (Catch accidental ".", "..", "/" etc.)
 _safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
 
-# $(call _vvEnc,DATA,OUTFILE) : Encode DATA to be shell-safe (within single
-#   quotes) and Make-safe (within double-quotes or RHS of assignment) and
-#   to work with /bin/echo and various shell echo builtins.  $2 is substituted
-#   with "!@" just to reduce size.
-_vvEnc = .$(subst ',`,$(subst ",!`,$(subst `,!b,$(subst $$,!S,$(subst $(\n),!n,$(subst $(\t),!+,$(subst \#,!H,$(subst $2,!@,$(subst \,!B,$(subst !,!1,$1)))))))))).#'
-
-# $(call _lazy,MAKESRC) : Encode MAKESRC for inclusion in a recipe so that
-#    it will be expanded when and if the recipe is executed.  Otherwise, all
-#    "$" characters will be escaped to avoid expansion by Make. For example:
-#    $(call _lazy,$$(info X=$$X))
-_lazy = $(subst $$,$(\e),$1)
-
-# Indent recipe lines and escape them for rule-phase expansion.  Un-escape
-#    _lazy encoding to enable late (rule phase) evaulation.
-_recipe = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)$(\t),$(\t)$1)$(\n))))
-
-
-#--------------------------------
-# Help system
-#--------------------------------
-
 define _helpMessage
-Minion v1.1b4 usage:
+Minion v1.1b5 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
@@ -467,77 +426,6 @@ variable indirections (`@var`), or aliases. Note that instances must
 be quoted for the shell.
 
 endef
-
-_fmtList = $(if $(word 1,$1),$(subst $(\s),$(\n)   , $(strip $1)),(none))
-
-_isProp = $(filter $].%,$(lastword $(subst $], $],$1)))
-
-# instance, indirection, alias, other
-_goalType = $(if $(_isProp),Property,$(if $(_isInstance),$(if $(_isClassInvalid),InvalidClass,Instance),$(if $(_isIndirect),Indirect,$(if $(_isAlias),Alias,Other))))
-
-_helpDeps = Direct dependencies: $(call _fmtList,$(call get,needs,$1))$(\n)$(\n)Indirect dependencies: $(call _fmtList,$(call filter-out,$(call get,needs,$1),$(call _rollup,$(call get,needs,$1))))
-
-define _helpInvalidClass
-"$1" looks like an instance with an invalid class name;
-`$(_idC).inherit` is not defined.  Perhaps a typo?
-
-endef
-
-# expand lazy-quoting of command to make it readable
-_renc = $(subst $(\e),$$,$(subst $$,$$$$,$1))
-
-define _helpInstance
-$1 is an instance.
-
-{out} = $(call get,out,$1)
-$(if $(call _hasProperty,command,$1),
-Command: $(call _qvn,$(call _renc,$(call get,command,$1))),
-{rule} = $(call _qvn,$(call get,rule,$1)))
-
-$(_helpDeps)
-endef
-
-define _helpIndirect
-"$1" is an indirection on the following $(if $(findstring *,$(_ivar)),wildcard:
-
-   $(_ivar),variable:
-
-$(call _describeVar,$(_ivar),   ))
-
-It expands to the following targets: $(call _fmtList,$(call _expand,$1))
-endef
-
-define _helpAlias
-"$1" is an alias for $(_isAlias).
-
-It is defined by:$(foreach v,$(filter Alias($1).%,$(.VARIABLES)),
-$(call _describeVar,$v,   )
-)
-$(call _helpDeps,$(_isAlias))
-
-It generates the following rule: $(call _qvn,$(call get,rule,$(_isAlias)))
-endef
-
-# $1 = C(A).P; $2 = description;  $(id) = C(A); $p = P
-define _helpPropertyInfo
-$(id) inherits from: $(call _chain,$(call _idC,$(id)))
-
-{$p} $(if $(if $2,,1),is not defined!,is defined by:
-
-$2
-
-Its value is: $(call _qv,$(call get,$p,$(id))))
-
-endef
-
-_helpProperty = $(foreach p,$(or $(lastword $(subst $].,$] ,$1)),$(error Empty property name in $1)),$(foreach id,$(patsubst %$].$p,%$],$1),$(call _helpPropertyInfo,$1,$(call _describeProp,$(id),$p))))
-
-define _helpOther
-Target "$1" is not generated by Minion.  It may be a source
-file or a target defined by a rule in the Makefile.
-endef
-
-_help! = $(info $(call _help$(call _goalType,$1),$1)$(\n))
 
 
 #--------------------------------
@@ -614,7 +502,6 @@ define _epilogue
     _cachedIDs ?= %
   endif
 
-  $(call _log,$(_goalIDs),_goalIDs)
   $(call _evalRules,$(_goalIDs),$(_cachedIDs))
 endef
 
@@ -635,25 +522,39 @@ _args = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))))
 _badAuto = $(call _error,$$$$$1 was evaluated prior to rule processing$(\n)during evaluation of $(if $(filter &%,$2),$(word 1,$(patsubst &%,%,$2)),$$(call $2,...))$(if $(_self), in context of $(_self)))
 _buildGoalID = $(if $(or $(_isInstance),$(_isIndirect)),_BuildGoal($1),$(_isAlias))
 _chain = $(if $1,$(call _chain,$(_chp+),$2 $(word 1,$1)),$(filter %,$2))
-_checkValue = $(\n)ifneq "$(call _qesc,$2)" "$3"$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)
+_checkValue = $(\n)ifneq "$(call _qesc,$2)" "$3"$(\n)  $$(info minion: $$$3 has changed!)$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)
 _chp+ = $(if $(filter %$],$1),$(_idC),$(filter-out =%,$($(word 1,$1).inherit) =$1))
 _cx = $(foreach w,$(word 1,$2).$1,$(if $(filter s%,$(flavor $w)),$(subst $$,$$$$,$(value $w)),$(if $(findstring {,$(value $w)),$(subst !1,!,$(subst !+,	,$(subst !0, ,$(subst $(\s),,$(call _cxTok,$(subst {inherit!0 ,{inherit!0,$(subst !0,!0 ,$(subst $;,$(if ,, , ),$(subst $], $] ,$(subst $[, $[ ,$(subst },} ,$(subst {, {,$(subst $(\s),!0,$(subst $(\t),!+,$(subst !,!1,$(value $w))))))))))),$1,$2,$w))))),$(value $w))))
 _cxInherit = $(call _cxMemo,$1,$(or $(call _walk,$1,$(call _chp+,$2)),$(call _E1,$1,,$3)))
 _cxMemo = $(if $(filter r%,$(flavor &$2.$1)),&$2.$1,$(call _fset,&$2.$1,$(call _cx,$1,$2)))
 _cxTok = $(patsubst {%},$$(call!0.,%,$$0),$(if $(findstring {inherit,$1),$(foreach w,$1,$(if $(filter {inherit} {inherit!0%},$w),$$(call!0$(subst $(\s),!0,$(call _cxInherit,$(if $(filter {inherit},$w),$2,$(patsubst {inherit!0%},%,$w)),$3,$4))),$w)),$1))
-_depsOf = $(or $(value *n$1),$(call _set,*n$1,$(or $(sort $(foreach w,$(filter %$],$(call get,needs,$1)),$w $(call _depsOf,$w))),$(if ,, ))))
 _describeProp = $(if $1,$(if $(filter u%,$(flavor $(word 1,$1).$2)),$(call _describeProp,$(or $(_idC),$(_chp+)),$2),$(call _describeVar,$(word 1,$1).$2,   )$(if $(and $(filter r%,$(flavor $(word 1,$1).$2)),$(findstring {inherit},$(value $(word 1,$1).$2))),$(\n)$(\n)...wherein {inherit} references:$(\n)$(\n)$(call _describeProp,$(or $(_idC),$(_chp+)),$2))))
 _describeVar = $2$(if $(filter r%,$(flavor $1)),$(if $(findstring $(\n),$(value $1)),$(subst $(\n),$(\n)$2,define $1$(\n)$(value $1)$(\n)endef),$1 = $(value $1)),$1 := $(subst $(\n),$$(\n),$(subst $$,$$$$,$(value $1))))
+_eq? = $(findstring $(subst $20,1,$10),1)
 _error = $(error $1)
+_escape = $(subst $;,$$;,$(subst $[,$$[,$(subst $],$$],$(subst $$,$$$$,$1))))
+_eval = $(eval $1)
+_evalRules = $(foreach w,$(call _rollupEx,$(sort $(_isInstance)),$2),$(call _eval,$(call get,rule,$w),$w))
 _expand = $(call _expandX,$1,$(_self).$2)
 _expandX = $(foreach w,$1,$(or $(filter %$],$w),$(if $(findstring @,$w),$(foreach x,$(or $(call _ivar,$w),=@),$(patsubst %,$(if $(filter @%,$w),%,$(subst $(\s),,$(filter %( %% ),$(subst @,$[ ,$w) % $(subst @, $] ,$w)))),$(if $(findstring *,$x),$(call _wildcard,$x),$(if $(filter u%,$(flavor $x)),$(call _EI,$w,$2),$(call _expandX,$($x),$x))))),$(or $(if $(filter f% o%,$(origin $w)),Alias($w)),$w))))
+_fmtList = $(if $(word 1,$1),$(subst $(\s),$(\n)   , $(strip $1)),none)
 _fsenc = $(subst },@R,$(subst {,@L,$(subst >,@r,$(subst <,@l,$(subst /,@D,$(subst ~,@T,$(subst !,@B,$(subst :,@C,$(subst *,@S,$(subst $],@-,$(subst $[,@+,$(subst |,@1,$(subst @,@_,$1)))))))))))))
 _fset = $(eval $$1 = $(if $(filter 1,$(word 1,1$20)),$$(or ))$(subst \#,$$(\H),$(subst $(\n),$$(\n),$2)))$1
+_goalType = $(if $(_isProp),Property,$(if $(_isInstance),$(if $(_isClassInvalid),InvalidClass,Instance),$(if $(_isIndirect),Indirect,$(if $(_isAlias),Alias,Other))))
 _graph = $(if $4,$(call _graph,$1,$2,$3,$(wordlist 2,99999999,$4),$(subst ``,` ,$(filter-out %9,$(subst `  ,``,$(patsubst `,` ,$(subst `$(word 1,$4)`,`,$5) `$(subst $(\s),,$(addsuffix `,$(call $1,$3,$(word 1,$4)))) 9)))),$6$(foreach w,$5,$(if $(filter `,$w), ,|)  )$(\n)$(foreach w,$5,$(if $(findstring `$(word 1,$4)`,$w),+->,$(if $(filter `,$w), ,|)  ))$(if $5, )$(call $2,$3,$(word 1,$4))$(\n)),$6)
 _graphDeps = $(call _graph,$1,$2,$3,$(call _traverse,$1,$3,$4))
 _group = $(if $1,$(subst | ,|0,$(subst ||,,$(join $(subst |,|1,$1),$(subst $(patsubst %,|,$(wordlist 1,$2,$1)),$(patsubst %,|,$(wordlist 1,$2,$1))|,$(patsubst %,|,$1))) )))
 _hasProperty = $(if $(or $(findstring s,$(flavor $2.$1)),$(call _walk,$1,$(filter-out $(\s)|%,$(subst $[, |,$2)))),1)
 _hashGet = $(patsubst $2:%,%,$(filter $2:%,$1))
+_help! = $(info $(call _help$(_goalType),$1))
+_helpAlias = "$1" is an alias for $(_isAlias).$(\n)$(\n)It is defined by:$(\n)   $(call _describeVar,$1)$(\n)$(\n)$(call _helpDeps,$(_isAlias))$(\n)$(\n)It generates the following rule: $(call _qvn,$(call get,rule,$(_isAlias)))
+_helpDeps = Direct dependencies: $(call _fmtList,$(call get,needs,$1))$(\n)$(\n)Indirect dependencies: $(call _fmtList,$(filter-out $(call get,needs,$1),$(call _rollup,$(call get,needs,$1))))
+_helpIndirect = "$1" is an indirection on the following $(if $(findstring *,$(_ivar)),wildcard:$(\n)$(\n)   $(_ivar),variable:$(\n)$(\n)   $(call _describeVar,$(_ivar)))$(\n)$(\n)It expands to the following targets: $(call _fmtList,$(call _expand,$1))$(\n)
+_helpInstance = $1 is an instance.$(\n)$(\n){out} = $(call get,out,$1)$(\n)$(\n)$(if $(call _hasProperty,command,$1),Command: $(call _qvn,$(call _renc,$(call get,command,$1))),{rule} = $(call _qvn,$(call get,rule,$1)))$(\n)$(\n)$(call _helpDeps,$1)$(\n)
+_helpInvalidClass = "$1" looks like an instance with an invalid class name;$(\n)`$$$(_idC).inherit` is not defined.  Perhaps a typo?$(\n)
+_helpOther = Target $1 is not generated by Minion.  It may be a source$(\n)file or a target defined by a rule in the Makefile.
+_helpProperty = $(foreach w,$(or $(lastword $(subst $].,$] ,$1)),$(error Empty property name in $1)),$(foreach x,$(patsubst %$].$w,%$],$1),$(call _helpPropertyInfo,$1,$(call _describeProp,$x,$w),$x,$w)))
+_helpPropertyInfo = $3 inherits from: $(call _chain,$(call _idC,$3))$(\n)$(\n){$4} $(if $(if $2,,$1),is not defined!,is defined by:$(\n)$(\n)$2$(\n)$(\n)Its value is: $(call _qv,$(call get,$4,$3)))$(\n)$(\n)
 _idC = $(if $(findstring $[,$1),$(word 1,$(subst $[, ,$1)))
 _inferIDs = $(if $2,$(foreach w,$1,$(or $(filter %$],$(patsubst %$(or $(suffix $(if $(filter %$],$w),$(call get,out,$w),$w)),.),%($w),$2)),$w)),$1)
 _info = $(info $1)
@@ -661,35 +562,45 @@ _isAlias = $(if $(filter f% o%,$(origin $1)),Alias($1))
 _isClassInvalid = $(filter u%,$(flavor $(_idC).inherit))
 _isIndirect = $(if $(findstring @,$1),$(filter-out %$],$1))
 _isInstance = $(filter %$],$1)
+_isProp = $(filter $].%,$(lastword $(subst $], $],$1)))
 _ivar = $(filter-out %@,$(subst @,@ ,$1))
+_lazy = $(subst $$,$(\e),$1)
 _namedArg1 = $(word 1,$(_namedArgs))
 _namedArgs = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))),$1)
 _once = $(if $(filter u%,$(flavor !o~$1)),$(call _set,!o~$1,$($1)),$(value !o~$1))
 _outBS = $(_fsenc)$(if $(findstring %,$3),,$(suffix $4))$(if $4,$(patsubst _/$(VOUTDIR)%,_%,$(if $(filter %$],$2),_)$(subst //,/_root_/,$(subst //,/,$(subst /../,/_../,$(subst /./,/_./,$(subst /_,/__,$(subst /,//,/$4))))))),$(call _outBX,$2))
 _outBX = $(subst @D,/,$(subst $(\s),,$(patsubst /%@_,_%@,$(addprefix /,$(subst @_,@_ ,$(_fsenc))))))
 _outBasis = $(if $(filter $5,$2),$(_outBS),$(call _outBS,$1$(subst _$(or $5,|),_|,_$2),$(or $5,out),$3,$4))
+_printfCmd = printf "%b" $(call _shellQuote,$(subst $(\n),\n,$(subst $(\t),\t,$(subst \,\\,$1))))
 _qesc = $(subst $(\n),$$($(\n)),$(subst \#,$$(\H),$(subst ",$$(\q),$(subst $$,$$$$,$1))))
 _qv = $(call _qvn,$1,')
-_qvn = $(if $(findstring $(\n),$1),$(subst $(\n),$(\n)$(_ti)  | ,$(\n)$1),$2$1$2)
-_rcr2 = @mkdir -p $(dir $1)$(\n)@> $1_tmp_$(\n)$(foreach w,$(call _group,$(filter-out $3,$2),$4),@$(call _printf,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)($x.needs) = $(filter $3,$(call _depsOf,$x)))$(\n))) >> $1_tmp_$(\n))@$(call _printf,_cachedIDs = $(filter-out $3,$2)$(\n)$(foreach w,minionCache minionNoCache $('varLog),$(call _checkValue,$1,$($w),$$($w)))$(if $('globLog),$(call _checkValue,$1,$(wildcard $('globLog)),$$(wildcard $('globLog))))$(foreach w,$('shellLog),$(call _checkValue,$1,$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w)))),$$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w))))))) >> $1_tmp_$(\n)@mv $1_tmp_ $1$(\n)
+_qvn = $(if $(findstring $(\n),$1),$(subst $(\n),$(\n)$3  | ,$(\n)$1),$2$1$2)
+_rcr2 = @mkdir -p $(dir $1)$(\n)@> $1_tmp_$(\n)$(foreach w,$(call _group,$(filter-out $3,$2),$4),@$(call _printfCmd,$(foreach x,$(call _ungroup,$w),$(\n)$(call get,rule,$x)$(if $3,$(\n)*D-$x = $(filter $3,$(call _rollupOne,$x)))$(\n))) >> $1_tmp_$(\n))@$(call _printfCmd,$(subst endif$(\n)$(\n)if,else if,$(subst $(\n) $(\n),$(\n)$(\n),_cachedIDs = $(filter-out $3,$2)$(\n)$(foreach w,minionCache minionNoCache $('varLog),$(call _checkValue,$1,$($w),$$($w)))$(if $('globLog),$(call _checkValue,$1,$(wildcard $('globLog)),$$(wildcard $('globLog))))$(foreach w,$('shellLog),$(call _checkValue,$1,$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w)))),$$(shell $(subst !1,!,$(subst !+,	,$(subst !0, ,$w))))))))) >> $1_tmp_$(\n)@mv $1_tmp_ $1$(\n)
+_recipe = $(subst $(\e),$$,$(subst $$,$$$$,$(subst $(\t)$(\n),,$(subst $(\n),$(\n)	,	$1)$(\n))))
 _relpath = $(if $(filter /%,$2),$2,$(if $(filter ..,$(subst /, ,$1)),$(error _relpath: '..' in $1),$(or $(foreach w,$(filter %/%,$(word 1,$(subst /,/% ,$1))),$(call _relpath,$(patsubst $w,%,$1),$(if $(filter $w,$2),$(patsubst $w,%,$2),../$2))),$2)))
-_rollup = $(sort $(foreach w,$(filter %$],$1),$w $(call _depsOf,$w)))
-_rollupEx = $(if $1,$(call _rollupEx,$(filter-out $3 $1,$(sort $(filter %$],$(call get,needs,$(filter-out $2,$1))) $(foreach w,$(filter $2,$1),$(value ($w.needs))))),$2,$3 $1),$(filter-out $2,$3))
-_rulecacheRecipe = $(info Updating Minion cache...)$(call _rcr2,$1,$(call _rollup,$(call _varToIDs,minionCache)),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
+_renc = $(subst $(\e),$$,$(subst $$,$$$$,$1))
+_rollup = $(sort $(foreach w,$(filter %$],$1),$w $(call _rollupOne,$w)))
+_rollupEx = $(if $1,$(call _rollupEx,$(filter-out $3 $1,$(sort $(filter %$],$(call get,needs,$(filter-out $2,$1))) $(foreach w,$(filter $2,$1),$(value *D-$w)))),$2,$3 $1),$(filter-out $2,$3))
+_rollupOne = $(or $(value *n$1),$(call _set,*n$1,$(or $(sort $(foreach w,$(filter %$],$(call get,needs,$1)),$w $(call _rollupOne,$w))),$(if ,, ))))
+_rollupSimple = $(if $1,$(call _rollupSimple,$(filter-out $2 $1,$(sort $(filter %$],$(call get,needs,$1)))),$2 $1),$(filter %$],$2))
+_rulecacheRecipe = $(info minion: Updating rule cache...)$(call _rcr2,$1,$(call _rollup,$(call _varToIDs,minionCache)),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
 _set = $(eval $$1 := $$2)$2
 _shell = $(if $(call _set,'shellLog,$(sort $('shellLog) $(subst $(\s),!0,$(subst $(\t),!+,$(subst !,!1,$1))))),)$(shell $1)
+_shellQuote = '$(subst ','\'',$1)'
 _ti = $(subst .,  ,$(*traceLevel*))
 _ti+ = $(eval *traceLevel* := .$(*traceLevel*))
 _ti- = $(eval *traceLevel* := $(patsubst %.,%,$(*traceLevel*)))
-_trace = $(foreach w,$1,$(call _info,_trace: $(if $(filter u%,$(flavor $w)),function $w not defined!,$(if $(findstring s,$(flavor TRACE*$w)),already traced $w,$(if $(filter $w,_traceIn _traceOut _qv _qvn _ti+ _ti- _ti),CANNOT trace $w,$(if $(call _fset,TRACE*$w,$(value $w)),)$(if $(call _fset,$w,$$(_traceIn)$$(call _traceOut,$$0,$$(call TRACE*$w,$$1,$$2,$$3,$$4,$$5,$$6,$$7,$$8,$$9))),)tracing $w ...)))))
-_traceIn = $(foreach w,$(or $(lastword $(foreach w,1 2 3 4 5 6 7 8 9,$(if $(value $w),$w))),0),$(if $(call _info,$(_ti)($(0)$(if $(filter 0,$w),, )$(foreach x,$(wordlist 1,$w,1 2 3 4 5 6 7 8 9),$(if $(findstring $(\n),$(value $x)),$$$x,'$(value $x)'))) ->),)$(if $(_ti+),)$(if $(foreach x,$(wordlist 1,$w,1 2 3 4 5 6 7 8 9),$(if $(findstring $(\n),$(value $x)),$(call _info,$(_ti)$$$x:$(call _qvn,$(value $x))))),))
-_traceOut = $(if $(_ti-),)$(if $(call _info,$(_ti)($1) <- $(call _qv,$2)),)$2
+_tqv = $(call _qvn,$1,',$(_ti))
+_trace = $(foreach w,$1,$(call _info,_trace: $(if $(filter u%,$(flavor $w)),function $w not defined!,$(if $(findstring s,$(flavor TRACE*$w)),already traced $w,$(if $(filter $w,_traceIn _traceOut _tqv _qv _qvn _ti+ _ti- _ti),CANNOT trace $w,$(if $(call _fset,TRACE*$w,$(value $w)),)$(if $(call _fset,$w,$$(_traceIn)$$(call _traceOut,$$0,$$(call TRACE*$w,$$1,$$2,$$3,$$4,$$5,$$6,$$7,$$8,$$9))),)tracing $w ...)))))
+_traceIn = $(foreach w,$(or $(lastword $(foreach w,1 2 3 4 5 6 7 8 9,$(if $(value $w),$w))),0),$(if $(call _info,$(_ti)($(0)$(if $(filter 0,$w),, )$(foreach x,$(wordlist 1,$w,1 2 3 4 5 6 7 8 9),$(if $(findstring $(\n),$(value $x)),$$$x,'$(value $x)'))) ->),)$(if $(_ti+),)$(if $(foreach x,$(wordlist 1,$w,1 2 3 4 5 6 7 8 9),$(if $(findstring $(\n),$(value $x)),$(call _info,$(_ti)$$$x:$(call _tqv,$(value $x))))),))
+_traceOut = $(if $(_ti-),)$(if $(call _info,$(_ti)($1) <- $(call _tqv,$2)),)$2
 _traverse = $(if $(word 1,$3),$(call _traverse,$1,$2,$(call $1,$2,$(word 1,$3)) $(wordlist 2,99999999,$3),$(filter-out $(word 1,$3),$4) $(word 1,$3)),$4)
 _ungroup = $(subst |1,|,$(subst |0, ,$1))
 _uniqQ = $(if $1,$(word 1,$1)   $(call _uniqQ,$(filter-out $(word 1,$1),$1)))
 _unique = $(filter %,$(subst ^c,^,$(subst ^p,%,$(call _uniqQ,$(subst %,^p,$(subst ^,^c,$1))))))
 _var = $(if $(call _set,'varLog,$(sort $('varLog) $1)),)$($1)
 _varToIDs = $(foreach w,$(call _expand,$($1)),$(if $(filter %$],$w),$w,$(error $1 references unknown target '$w')))
+_vvEnc = .$(subst ',`,$(subst ",!`,$(subst `,!b,$(subst $$,!S,$(subst $(\n),!n,$(subst $(\t),!+,$(subst \#,!H,$(subst $2,!@,$(subst \,!B,$(subst !,!1,$1)))))))))).
 _walk = $(if $2,$(if $(findstring s,$(flavor $(word 1,$2).$1)),$2,$(call _walk,$1,$(call _chp+,$2))))
 _wildcard = $(if $(call _set,'globLog,$(sort $('globLog) $1)),)$(wildcard $1)
 get = $(foreach _self,$2,$(foreach _class,$(if $(findstring $[,$(_self)),$(or $(filter-out |%,$(subst $[, |,$(filter %$],$(_self)))),$(_E0)),$(if $(findstring $],$(_self)),$(_E0),_File)),$(call .,$1)))

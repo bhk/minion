@@ -8,6 +8,81 @@
 
 
 ;;----------------------------------------------------------------
+;; Shell-related tools
+;;----------------------------------------------------------------
+
+;; Quote ARG for inclusion on the BASH command line
+;;
+(define (_shellQuote arg)
+  &native
+  (.. "'" (subst "'" "'\\''" arg) "'"))
+
+
+;; Return a shell command that will write VALUE to stdout using /bin/printf
+;;
+(define (_printfCmd value)
+  &native
+  (define `escaped
+    (subst "\\" "\\\\"
+           "\t" "\\t"
+           "\n" "\\n"
+           value))
+  (.. "printf \"%b\" " (_shellQuote escaped)))
+
+
+;; Encode DATA to be shell-safe (within single quotes) and Make-safe (within
+;; double-quotes or RHS of assignment) and to work with /bin/echo and
+;; various shell echo builtins without further escaping.
+;;
+;; SUBSTR, if given, is substituted with a short unique substring, which
+;; can reduce the size of the resulting string.
+;;
+(define (_vvEnc data substr)
+  &native
+  (define `enc
+    (subst "!" "!1"
+           "\\" "!B"
+           substr "!@"
+           "#" "!H"
+           "\t" "!+"
+           "\n" "!n"
+           "$" "!S"
+           "`" "!b"
+           "\"" "!`"
+           "'" "`"
+           data))
+  (.. "." enc "."))
+
+
+;; Encode CODE for inclusion in a recipe so that it will be expanded when
+;; and only if the recipe is executed.  This exists as a way through the
+;; escaping performed by _recipe, which ordinarily prevents expansion.
+;;
+(define (_lazy code)
+  &native
+  (subst "$" "\x1B" code))
+
+
+;; Encode COMMANDS for inclusion in a Make rule.  Tabs are inserted at the
+;; start of each line, and "$" characters are protected to prevent further
+;; expansion by Make in the rule processing phase.  (In the rare cases where
+;; that is intended, use _lazy.)
+;;
+(define (_recipe commands)
+  &native
+  ;; indent lines and remove empty lines
+  (define `fix-lines
+    (subst "\t\n" ""
+           (.. (subst "\n" "\n\t" (.. "\t" commands)) "\n")))
+  (subst "$" "$$"
+         "\x1B" "$"
+         fix-lines))
+
+(expect "\ta$$b\n\tc\n" (_recipe "a$b\n\nc"))
+(expect "\ta$b\n" (_recipe (_lazy "a$b")))
+
+
+;;----------------------------------------------------------------
 ;; _inferIDs
 ;;----------------------------------------------------------------
 
@@ -46,19 +121,47 @@
 
 
 ;;----------------------------------------------------------------
-;; _depsOf, _rollup, _rollupEx
+;; rollups: Traverse instances and their {needs} transitively.
+;;
+;; This is done in the following cases:
+;;
+;;   E: Rule eval: Finding IDs for rules that need to be generated prior to
+;;      Make's rule processing phase.
+;;
+;;   C: Rule cache: Getting IDs for rules that need to be written
+;;      to the cache file.
+;;
+;;   H: In help messages that list direct & indirect dependencies.
+;;
+;; Case H is simple: just transitively follow {needs}.  Cases E & C would be
+;; simple if we were just caching rules, but we also want to avoid the cost
+;; of rollups when a cache is present ... it can take 5s in a 30,000-rule
+;; project without a cache versus milliseconds with one.  (The time spent is
+;; not algorithm-sensitive; just evaulating {needs} once for each instance
+;; takes the bulk of the time.)
+;;
+;; The approach is to define a "needs var" in the cache file for each cached
+;; ID conveys the un-cached IDs on which the ID depends *transitively*.
+;; This requires the following:
+;;
+;;   C: Generate transitive dependencies *per-instance*.  To do this
+;;      without terrible performance, _rollup uses memoization.
+;;
+;;   E: Instead of getting all rollups for goals and then filtering out the
+;;      cached IDs, we use a pruning (or skipping?) traversal, _rollupEx.
+;;
 ;;----------------------------------------------------------------
 
 ;; Return transitive dependencies of ID, excluding non-instances.  Memoize
 ;; results so this can be applied efficiently to many IDs in arbitrary
 ;; order.
 ;;
-(define (_depsOf id)
+(define (_rollupOne id)
   &native
   (define `memo-var (needs-memo-var id))
   (define `xdeps
     (sort (foreach (i (isInstance (get "needs" id)))
-            (._. i (_depsOf i)))))
+            (._. i (_rollupOne i)))))
   (or (native-value memo-var)
       (_set memo-var (or xdeps " "))))
 
@@ -67,9 +170,20 @@
 ;;
 (define (_rollup ids)
   &native
+  &public
   (sort
    (foreach (i (isInstance ids))
-     (._. i (_depsOf i)))))
+     (._. i (_rollupOne i)))))
+
+
+(define (_rollupSimple ids ?prev-seen)
+  &native
+  &public
+  (define `seen (._. prev-seen ids))
+  (define `deps (sort (isInstance (get "needs" ids))))
+  (if ids
+      (_rollupSimple (filter-out seen deps) seen)
+      (isInstance prev-seen)))
 
 
 ;; Return IDS and their transitive dependencies that are instances,
@@ -92,14 +206,14 @@
       (filter-out excludes seen)))
 
 
-;; Test _depsOf, _rollup, _rollupEx
+;; Test _rollupOne, _rollup, _rollupEx
 (set-native "R(a).needs" "R(b) R(c) x y z")
 (set-native "R(b).needs" "R(c) R(d) x y z")
 (set-native "R(c).needs" "R(d)")
 (set-native "R(d).needs" "R(e)")
 (set-native "R(e).needs" "")
 
-(expect (_depsOf "R(a)")
+(expect (_rollupOne "R(a)")
         "R(b) R(c) R(d) R(e)")
 
 (expect (_rollup "R(a)")
@@ -116,6 +230,9 @@
 
 (expect (strip (_rollupEx "R(a)" "R(d)"))
         "R(a) R(b) R(c) R(x)")
+
+(expect (_rollupSimple "R(a)")
+        "R(a) R(b) R(c) R(d) R(e)")
 
 
 ;;----------------------------------------------------------------
@@ -394,12 +511,10 @@
 ;; Rule cache generation
 ;;----------------------------------------------------------------
 
+;; TODO
 (declare (_isAlias name) &native &public)
 (declare (_isInstance name) &native &public)
 (declare (_isIndirect name) &native &public)
-
-;; Generate a `printf` command line
-(declare (_printf text) &native &public)
 
 
 ;; Escape VALUE for inclusion literally in `ifeq "..." "..."` contexts.
@@ -416,6 +531,7 @@
 (define (_checkValue cacheFile oldValue newExpr)
   &native
   (.. "\nifneq \"" (_qesc oldValue) "\" \"" newExpr "\"\n"
+      "  $(info minion: $" newExpr " has changed!)\n"
       "  " cacheFile ": $(_forceTarget)\n"
       "endif\n"))
 
@@ -433,13 +549,13 @@
       (.. "\n" (get "rule" i)
           (if excludedIDs
               (.. "\n" (rulecache-needs-var i) " = "
-                  (filter excludedIDs (_depsOf i))))
+                  (filter excludedIDs (_rollupOne i))))
           "\n")))
 
   ;; Output validity checks for changes to _wildcard, _shell, or _var
   ;; results, and check `minionCache` and `minionNoCache` just in case
   ;; they were supplied via the environment.
-  (define `epilogue
+  (define `epilogue-1
     (.. "_cachedIDs = " cachedIDs "\n"
         (foreach (v (._. "minionCache" "minionNoCache" varLog))
           (_checkValue cacheFile (native-var v) (.. "$(" v ")")))
@@ -448,12 +564,15 @@
         (foreach (cmd shellLog)
           (_checkValue cacheFile (shell (promote cmd)) (.. "$(shell " (promote cmd) ")")))))
 
+  (define `epilogue
+    (subst "\n \n" "\n\n" "endif\n\nif" "else if" epilogue-1))
+
   (.. "@mkdir -p " (dir cacheFile) "\n"
       "@> " tmpFile "\n"  ;; create/clear file
       (foreach (g (_group cachedIDs groupSize))
-        (.. "@" (_printf (groupRules g)) " >> " tmpFile "\n"))
+        (.. "@" (_printfCmd (groupRules g)) " >> " tmpFile "\n"))
       ;; validity checks must be done *after* rules have been generated
-      "@" (_printf epilogue) " >> " tmpFile "\n"
+      "@" (_printfCmd epilogue) " >> " tmpFile "\n"
       "@mv " tmpFile " " cacheFile "\n"))
 
 
@@ -484,5 +603,13 @@
   (define `includes (_rollup (_varToIDs "minionCache")))
   (define `excludes (filter "%)" (_varToIDs "minionNoCache")))
 
-  (print "Updating Minion cache...")
+  (print "minion: Updating rule cache...")
   (_rcr2 cacheFile includes excludes _cacheGroupSize))
+
+
+;; Evaluate rules of IDs and their transitive dependencies.
+;;
+(define (_evalRules ids excludes)
+  &native
+  (foreach (id (_rollupEx (sort (_isInstance ids)) excludes))
+    (_eval (get "rule" id) id)))

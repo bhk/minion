@@ -32,9 +32,9 @@ $(call _expectEQ,$(call _shellQuote,a),'a')
 $(call _expectEQ,$(call _shellQuote,'a'),''\''a'\''')
 
 
-# _printfEsc
+# _printfCmd
 
-$(call _expectEQ,$(call _printfEsc,a\b$(\t)c$(\n)d%e%%f),a\\b\tc\nd%e%%f)
+$(call _expectEQ,$(call _printfCmd,a\b$(\t)c$(\n)d%e%%f),printf "%b" 'a\\b\tc\nd%e%%f')
 
 
 # _escape
@@ -134,7 +134,7 @@ $(call _expectEQ,$(call _buildGoalID,as(df)),_BuildGoal(as(df)))
 $(call _expectEQ,$(call _buildGoalID,asdf),)
 
 
-# _depsOf, _rollup, _rollupEx
+# _rollupOne, _rollup, _rollupEx
 
 R(a).needs = R(b) R(c) x y z
 R(b).needs = R(c) x y z
@@ -143,7 +143,7 @@ R(d).needs = R(e)
 R(e).needs = 
 
 $(call _expectEQ,\
-  $(call _depsOf,R(a)),\
+  $(call _rollupOne,R(a)),\
   R(b) R(c) R(d) R(e))
 $(call _expectEQ,\
    $(call _rollup,R(a)),\
@@ -156,7 +156,7 @@ $(call _expectEQ,\
   R(a) R(b) R(c))
 
 
-(R(d).needs) = R(x)# rule cache needs variable
+*D-R(d) = R(x)# rule cache needs variable
 R(x).needs =
 
 $(call _expectEQ,\
