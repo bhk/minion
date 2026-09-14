@@ -300,14 +300,16 @@
 
   (_error
    (..
+    "minion: Invalid target: '" id "'\n"
     (if (filter "%@" id)
-        (.. "Invalid target (ends in '@'): " id)
-        (.. "Indirection '" id "' references undefined variable '" (_ivar id) "'"))
+        (.. "Name ends in '@'")
+        (.. "References undefined variable '" (_ivar id) "'"))
     (if where
         (.. "\nFound while expanding "
             (if (filter "_BuildGoal(%" where)
                 "command line goal"
-                where))))))
+                where)))
+    "\n\n")))
 
 
 ;; WHERE = where LIST came from, e.g. "C(A).P or variable name
@@ -423,11 +425,12 @@
 (define (_argError arg)
   &native
   (_error
-   (.. "Argument '" (subst "`" "" arg) "' is mal-formed:\n"
+   (.. "minion: Argument '" (subst "`" "" arg) "' is mal-formed:\n"
        "   " (subst "`(" " *(*" "`)" " *)* " "`" "" arg) "\n"
        (if (native-var "C")
            (.. "during evaluation of "
-               (native-var "C") "(" (native-var "A") ")")))))
+               (native-var "C") "(" (native-var "A") ")"))
+       "\n\n")))
 
 
 ;; Protect special characters that occur between balanced brackets.

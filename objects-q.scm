@@ -29,6 +29,7 @@
 (set-native-fn "C.z" "<C.z>")
 (set-native-fn "C.icm" "C.icm + {inherit}")
 (set-native-fn "C.iname" "C.iname + {inherit m}")
+(set-native-fn "C.idp" "{B(other).self}")
 
 (set-native    "C(a).s" "C(a).s:$0 $$ {x}")        ;; simple instance prop
 (set-native-fn "C(a).r" "C(a).r:$0 $$ {class}")    ;; recursive instance prop
@@ -90,6 +91,10 @@
 (expect (native-value "&C.iname") "C.iname + $(call &Mixin B.m)")
 (expect (native-value "&Mixin B.m") "Mixin.m")
 
+;; {ID.PROP} functionality
+(expect (get "idp" "C(a)") "B(other)")
+
+
 ;; _File(PLAIN) defaulting ... note _self does *not* reflect _File(xxx), but
 ;; that only affects the _File class itself.  $(_argText) seems to reflect
 ;; PLAIN.
@@ -109,16 +114,16 @@
    (expect 1 (xsee error-content (first *error*)))))
 
 (expect-error (get "p" "(a)") nil
-               "'(a)'; no CLASS")
+               "minion: Mal-formed instance name '(a)'\nNo CLASS before '('")
 
 (expect-error (get "p" "C(a") nil
-              "'C(a'; no ')'")
+              "No ')' at end")
 
 (expect-error (get "p" "C(a)b") nil
-              "'C(a)b'; no ')' at end")
+              "No ')' at end")
 
 (expect-error (get "p" "Ca)") nil
-              "'Ca)'; unbalanced ')'")
+              "Unbalanced ')'")
 
 ;; _E1 errors
 
@@ -126,40 +131,41 @@
 (let-global ((_self "C(a)")
              (_class "C"))
   ;; site
-  (expect 1 (see (.. "Undefined property {y} for C(a) was referenced "
-                     "by {inherit} in:\n   A.y = Y")
-                 (e1-msg "y" nil "A.y")))
+  (expect 1 (see (.. "minion: Undefined property {icm}\n"
+                     "on instance: C(a)\n"
+                     "via {inherit} in:\n\n"
+                     "   C.icm = C.icm + {inherit}\n\n")
+                 (e1-msg "icm" nil "C.icm")))
   ;; caller is &C.P memo of C.P
-  (expect 1 (see "from:\n   C.z =" (e1-msg "p" "&C.z" nil)))
+  (expect 1 (see "during call to:\n\n   C.z =" (e1-msg "p" "&C.z" nil)))
   ;; caller is &C.P memo of inherited prop
-  (expect 1 (see "{p} for C(a) was referenced from:\n   B.y =" (e1-msg "p" "&C.y" nil)))
+  (expect 1 (see "B.y =" (e1-msg "p" "&C.y" nil)))
   ;; caller is complex &CHP.P
-  (expect 1 (see "from:\n   Mixin.m =" (e1-msg "p" "&Mixin B.m" nil)))
+  (expect 1 (see "Mixin.m =" (e1-msg "p" "&Mixin B.m" nil)))
   ;; caller is &I.P
-  (expect 1 (see "from:\n   C(a).r =" (e1-msg "p" "C(a).r" nil)))
+  (expect 1 (see "C(a).r =" (e1-msg "p" "C(a).r" nil)))
   ;; caller is OTHER
-  (expect 1 (see "from:\n   _shell =" (e1-msg "p" "_shell" nil)))
+  (expect 1 (see "during call to:\n\n   _shell =" (e1-msg "p" "_shell" nil)))
   ;; bad class?
   (let-global ((_class "CX"))
     (expect 1 (see "CX.inherit is not defined" (e1-msg "p" "foo" nil)))))
 
 (expect-error (get "unk" "C(a)") nil
-              "Undefined property {unk} for C(a)")
+              "Undefined property {unk}\non instance: C(a)")
 
 (set-native-fn "C.e1" "{inherit}")
 (expect-error (get "e1" "C(a)") nil
-              (.. "Undefined property {e1} for C(a) was referenced "
-                  "by {inherit} in:\n   C.e1 = {inherit}"))
+              (.. "minion: Undefined property {e1}\n"
+                  "on instance: C(a)\n"
+                  "via {inherit} in:\n\n   C.e1 = {inherit}"))
 
 (set-native-fn "C(a).e2" "{inherit UNK}")
 (expect-error (get "e2" "C(a)") nil
-              (.. "Undefined property {UNK} for C(a) was referenced by "
-                  "{inherit UNK} in:\n   C(a).e2 = {inherit UNK}"))
+              "via {inherit UNK}")
 
 (set-native-fn "C.eu" "{undef}")
 (expect-error (get "eu" "C(a)") nil
-              (.. "Undefined property {undef} for C(a) was referenced from:\n"
-                  "   C.eu = {undef}"))
+              "during call to:\n\n   C.eu =")
 
 ;; _describeProp
 

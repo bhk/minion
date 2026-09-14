@@ -155,10 +155,9 @@ Recursive property definitions, as other variables in Make, can use `$(...)`
 expressions to substitute Make variables and call functions.  They may also
 use the following Minion-specific syntax constructs:
 
- * `{PROP}` refers to other properties of the current instance.  `PROP` must
-   not contain any spaces, parentheses, or commas, and it cannot be
-   "inherit".  When this expression is expanded, it will be replaced by the
-   value of that property computed for the *current* instance.
+ * `{PROP}` refers to a property of the current instance.  This expression
+   is equivalent to `$(call .,PROP)`.  `PROP` may contain other Make or
+   Minion expansions.
 
  * `{inherit}` queries the parent class for the value of the current
    property -- in other words, the value the property would have taken on if
@@ -170,29 +169,38 @@ use the following Minion-specific syntax constructs:
 
  * `{inherit PROP}` queries the parent class for the value of `PROP`.  This
    performs a lookup of `PROP` that begins above the current point in the
-   inheritance chain.  This is similar to the function of the `super`
+   inheritance chain.  `PROP` must be a simple constant; no embedded
+   expressions are admitted.  This is similar to the function of the `super`
    keyword in Smalltalk and some other languages.  It allows you to override
    one property and still access the would-have-been-inherited value from
-   another property.  Here is a perhaps unrealistic but illustrative example:
+   another property.  Here is a perhaps unrealistic but illustrative
+   example:
 
         RotImage.inherit = Image
         RotImage.y = {inherit x}
         RotImage.x = -{inherit y}
 
-Property definitions can make use of various [functions and variables
-exported by Minion](#exported-definitions), because property evaluation
-only takes place after all the `minion.mk` definitions have been processed.
+ * `{ID.PROP}` refers to a property of instance ID.  This expression is
+   equivalent to `$(call get,PROP,ID)`.  `ID` and `PROP` may contain other
+   Make or Minion expansions.
 
-When a property definition expands uses `$(VAR)` or `$(call VAR)`,
-expressions within that referenced variable can make use of Minion-provided
-functions, and the notion of "current instance" still applies during the
-expansion of that variable.  However, Minion property *syntax* -- `{PROP} --
-is available only to property definitions discovered by Minion when it is
-computing a property value; it does not apply to variables evaluated with
-`$(VAR)` or `$(call VAR,...)`.
+ * `{}` is a shorthand for `$(_self)`.
 
-Minion property evaluation is memoized, so each property definition is
-expanded no more than once for each instance.
+ * `${` and `$}` expand to `{` and `}`.  Additionally, when an
+   opening/closing brace is immediately followed/preceded by a space
+   character, they are not treated as special characters.  For example, `{
+   echo hi }` is not treated as Minion expression.
+
+When a property definition expands a variable with `$(VAR)` or `$(call
+VAR)`, that referenced variable can make use of Minion-provided functions,
+and the notion of "current instance" still applies during the expansion of
+that variable.  However, Minion property *syntax* -- `{PROP} -- is available
+only within property definition variables such as `Class(Arg).prop` or
+`Class.prop`; it does not apply to variables evaluated with `$(VAR)` or
+`$(call VAR,...)`.
+
+Minion uses memoization, so property definitions are compiled at most once,
+and values of properties of an instance are computed at most once.
 
 
 ## Argument Lists
@@ -637,12 +645,10 @@ etc.).  Variables defined by by minion.mk begin with "minion" or "_" to avoid
 unintentional conflicts with user makefiles, except for built-in classes and
 the following un-prefixed names:
 
-    V, OUTDIR, VOUTDIR               Control of build output
-    ., get                           Core object system functions
-    \s \t \n \e \H \q ; [ ] [[ ]]    Character constants
-    clean
-    help
-    graph
+    V, OUTDIR, VOUTDIR            Control of build output
+    clean, help, graph            Built-in aliases
+    ., get                        Core object system functions
+    \s \t \n \e \H \q ; [ ]       Character constants
 
 We generally avoid single-letter global variables, reserving them for use as
 "local" variables (in Make `foreach` expressions).
@@ -664,8 +670,6 @@ within [recursive](#simple-and-recursive-variables) property definitions.
   - `$;` : `,`
   - `$[` : `(`
   - `$]` : `)`
-  - `$([[)`: `{`
-  - `$(]])`: `}`
 
 * `$(call get,PROP,IDS)`
 
