@@ -471,7 +471,8 @@ define _epilogue
     # help or clean mode
     ifeq "help" "$(__modeKey)"
        _error = $(info $(subst $(\n),$(\n)   ,ERROR: $1)$(\n))
-       _goalIDs := _Goal(help) $(patsubst %,_HelpGoal(%),$(__modeArgs))
+       _goalIDs := $(patsubst %,_HelpGoal(%),$(__modeArgs)) \
+          $(if $(filter-out help,$(__modeArgs)),_Goal(help))
     else
        _goalIDs := _Goal(clean) $(patsubst %,_CleanGoal(%),$(__modeArgs))
     endif
