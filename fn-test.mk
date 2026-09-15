@@ -23,7 +23,7 @@ $(if $(call _eq?,1,1),,$(error eq))
 
 # constants
 
-$(call _expectEQ,$(\s)$(\t)$(\H)$([[)$(]])$[$;$], 	#{}(,))
+$(call _expectEQ,$(\s)$(\t)$(\H)$[$;$], 	#(,))
 
 
 # _shellQuote

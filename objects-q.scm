@@ -29,6 +29,7 @@
 (set-native-fn "C.z" "<C.z>")
 (set-native-fn "C.icm" "C.icm + {inherit}")
 (set-native-fn "C.iname" "C.iname + {inherit m}")
+(set-native-fn "C.idp" "{B(other).self}")
 
 (set-native    "C(a).s" "C(a).s:$0 $$ {x}")        ;; simple instance prop
 (set-native-fn "C(a).r" "C(a).r:$0 $$ {class}")    ;; recursive instance prop
@@ -89,6 +90,10 @@
 (expect (get "iname" "C(a)") "C.iname + Mixin.m")
 (expect (native-value "&C.iname") "C.iname + $(call &Mixin B.m)")
 (expect (native-value "&Mixin B.m") "Mixin.m")
+
+;; {ID.PROP} functionality
+(expect (get "idp" "C(a)") "B(other)")
+
 
 ;; _File(PLAIN) defaulting ... note _self does *not* reflect _File(xxx), but
 ;; that only affects the _File class itself.  $(_argText) seems to reflect

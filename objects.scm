@@ -13,6 +13,7 @@
 (require "core")
 (require "export.scm")
 (require "base.scm")
+(require "compile.scm")
 
 
 (define `(func-defined? name)
@@ -174,83 +175,6 @@
       (_E1 p caller site)))
 
 
-(declare (_cxMemo p chp) &native)
-
-
-;; Compile an inherited property definition, returning the memoized object
-;; function name.
-;;
-;; P = property to compile
-;; CHP = chain position *above which* we will search
-;; SRC-VAR = the property definition inheriting P
-;;
-(define (_cxInherit p chp src-var)
-  &native
-  (_cxMemo p (ewalk p (_chp+ chp) nil src-var)))
-
-
-;; See _cxDef.
-;;
-(define (_cxTok tokens p chp src-var)
-  &native
-
-  (define `(iprop tok)
-    (if (filter "{inherit}" tok)
-        p
-        (patsubst "{inherit!0%}" "%" tok)))
-
-  ;; expand {inherit} and {inherit NAME} expressions
-  (define `stage1
-    (if (findstring "{inherit" tokens)
-        (foreach (tok tokens)
-          (if (filter "{inherit} {inherit!0%}" tok)
-              (.. "$(call!0"
-                  (subst " " "!0" (_cxInherit (iprop tok) chp src-var))
-                  ")")
-              tok))
-        tokens))
-
-  ;; expand {PROP} expressions
-  (patsubst "{%}" "$(call!0.,%,$0)" stage1))
-
-
-;; Compile a property definition, returning a function body.
-;;
-;; SRC = text of function definition
-;; P = name of property being compiled
-;; CHP = chain position at which SRC-VAR was found
-;; SRC-VAR = variable from which SRC was obtained
-;;
-(define `(cxDefn src p chp src-var)
-  ;; convert string to list of tokens for parsing {WORD} expressions
-  (define `(tokenize src)
-    (subst "{" " {"
-           "}" "} "
-           "(" " ( "
-           ")" " ) "
-           "," " , "
-           "!0" "!0 "
-           "{inherit!0 " "{inherit!0"
-           (demote src)))
-
-  (define `(untokenize tokens)
-    (promote (subst " " "" tokens)))
-
-  (if (findstring "{" src)
-      (untokenize (_cxTok (tokenize src) p chp src-var))
-      src))
-
-
-(let-global ((_cxInherit
-              (lambda (p chp sv)
-                (.. "&" chp "Base." p))))
-
-  (expect "$(call .,FOO,$0)" (cxDefn "{FOO}" "P" "CC" "CC.P"))
-  (expect "$(call &CCBase.P)" (cxDefn "{inherit}" "P" "CC" "CC.P"))
-  (expect "$(call &CCBase.X)" (cxDefn "{inherit X}" "P" "CC" "CC.P"))
-  (expect " { FOO }  {(} {a)} " (cxDefn " { FOO }  {(} {a)} " "P" "CC" "CC.I")))
-
-
 ;; Compile a Minion property definition, returning a function body.
 ;;
 ;; P = property name
@@ -264,7 +188,7 @@
       (native-value src-var))
     (if (simple? src-var)
         (subst "$" "$$" src)
-        (cxDefn src p chp src-var))))
+        (cxBody src p chp src-var))))
 
 
 (define (_cxMemo p chp)
@@ -273,6 +197,18 @@
   (if (func-defined? memo-var)
       memo-var
       (_fset memo-var (_cx p chp))))
+
+
+;; Compile an inherited property definition, returning the memoized object
+;; function name.
+;;
+;; P = property to compile
+;; CHP = chain position *above which* we will search
+;; SRC-VAR = the property definition inheriting P
+;;
+(define (_cxInherit p chp src-var)
+  &native
+  (_cxMemo p (ewalk p (_chp+ chp) nil src-var)))
 
 
 ;; Evaluate property P for current instance (given by dynamic _class and A)

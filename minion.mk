@@ -395,8 +395,6 @@ _cacheGroupSize ?= 40
 \t := $(if ,,	)
 \H := \#
 \e := 
-[[ := {
-]] := }
 [ := (
 ] := )
 ; := ,
@@ -411,7 +409,7 @@ endef
 _safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
 
 define _helpMessage
-Minion v1.1b5 usage:
+Minion v1.1b6 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
@@ -524,10 +522,17 @@ _buildGoalID = $(if $(or $(_isInstance),$(_isIndirect)),_BuildGoal($1),$(_isAlia
 _chain = $(if $1,$(call _chain,$(_chp+),$2 $(word 1,$1)),$(filter %,$2))
 _checkValue = $(\n)ifneq "$(call _qesc,$2)" "$3"$(\n)  $$(info minion: $$$3 has changed!)$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)
 _chp+ = $(if $(filter %$],$1),$(_idC),$(filter-out =%,$($(word 1,$1).inherit) =$1))
-_cx = $(foreach w,$(word 1,$2).$1,$(if $(filter s%,$(flavor $w)),$(subst $$,$$$$,$(value $w)),$(if $(findstring {,$(value $w)),$(subst !1,!,$(subst !+,	,$(subst !0, ,$(subst $(\s),,$(call _cxTok,$(subst {inherit!0 ,{inherit!0,$(subst !0,!0 ,$(subst $;,$(if ,, , ),$(subst $], $] ,$(subst $[, $[ ,$(subst },} ,$(subst {, {,$(subst $(\s),!0,$(subst $(\t),!+,$(subst !,!1,$(value $w))))))))))),$1,$2,$w))))),$(value $w))))
+_cx = $(foreach w,$(word 1,$2).$1,$(if $(filter s%,$(flavor $w)),$(subst $$,$$$$,$(value $w)),$(if $(findstring {,$(subst },{,$(value $w))),$(call _cxb1,$(value $w),$1,$2,$w),$(value $w))))
+_cxD = $(subst $(\t),!+,$(subst $(\s),!0,$(subst !,!1,$1)))
 _cxInherit = $(call _cxMemo,$1,$(or $(call _walk,$1,$(call _chp+,$2)),$(call _E1,$1,,$3)))
 _cxMemo = $(if $(filter r%,$(flavor &$2.$1)),&$2.$1,$(call _fset,&$2.$1,$(call _cx,$1,$2)))
-_cxTok = $(patsubst {%},$$(call!0.,%,$$0),$(if $(findstring {inherit,$1),$(foreach w,$1,$(if $(filter {inherit} {inherit!0%},$w),$$(call!0$(subst $(\s),!0,$(call _cxInherit,$(if $(filter {inherit},$w),$2,$(patsubst {inherit!0%},%,$w)),$3,$4))),$w)),$1))
+_cxNest = $(if $(findstring !@,$1),$(subst $(if ,,!@,),$$;,$(call _cxNest2,$(subst !@$],!@$] ,$(subst !@$[, !@$[,$1)))),$1)
+_cxNest2 = $(if $(filter !@(%!@),$1),$(call _cxNest2,$(subst !@$],!@$] ,$(subst !@$[, !@$[,$(subst $(\s),,$(foreach w,$1,$(if $(filter !@(%!@),$w), $(subst !@,,$w) ,$w)))))),$(if $(findstring !@$[,$(subst !@$],!@$[,$1)),,$(word 1,$1)))
+_cxU = $(subst !1,!,$(subst !0, ,$(subst !+,	,$1)))
+_cxb1 = $(call _cxU,$(subst !@,,$(subst $(\s),,$(call _cxb2,$(patsubst !@{%!@},$$(call!0.,%,$$0),$(subst !@{inherit!,!@{inherit !,$(subst $(\s)!@},!@} ,$(subst !, !,$(subst !@{!@},$$(_self),$(subst !0!@},!0},$(subst !@{!0,{!0,$(subst $$!@},},$(subst $$!@{,{,$(subst $$$$,$$$$ ,$(subst },!@},$(subst {,!@{,$(subst $],!@$],$(subst $[,!@$[,$(subst $;,$(if ,,!@,),$(subst .,!@.,$(_cxD))))))))))))))))),$2,$3,$4))))
+_cxb2 = $(if $(findstring !@{,$(subst !@},!@{,$1)),$(call _cxb3,$(foreach w,$(subst !@},!@} ,$(subst !@{, !@{,$(subst $(\s),,$1))),$(if $(filter !@{inherit!@} !@{inherit!0%!@},$w),$$(call!0$(call _cxD,$(call _cxInherit,$(if $(filter !@{inherit!@},$w),$(call _cxD,$2),$(if $(findstring !,$(or $(patsubst !@{inherit!0%!@},%,$w),!)),$(call _cxbError,IN,$w,$4,$2),$(patsubst !@{inherit!0%!@},%,$w))),$3,$4))),$w)),$2,$3,$4),$1)
+_cxb3 = $(if $(filter !@{%!@},$1),$(call _cxb3,$(subst !@},!@} ,$(subst !@{, !@{,$(subst $(\s),,$(foreach w,$1,$(or $(filter-out !@{%!@},$w),$(foreach x,$(or $(call _cxNest,$(patsubst !@{%!@},%,$w)),$(call _cxbError,UP,$w,$4,$2)),$(if $(findstring !@.,$x),$(if $(filter !@.% %!@.,$x),$(call _cxbError,G1,$w,$4,$2),$(if $(word 3,$(subst !@.,. .,$x)),$(call _cxbError,G2,$w,$4,$2),$$(call!0get,$(word 2,$(subst !@., ,$x)),$(word 1,$(subst !@., ,$x))))),$$(call!0.,$x,$$0)))))))),$2,$3,$4),$(if $(findstring !@{,$(subst !@},!@{,$1)),$(call _cxbError,UB,$1,$4,$2),$1))
+_cxbError = $(call _error,minion: Error in property definition$(\n)$(\n)$(subst @,$(call _cxU,$(subst !@,,$(subst $(\s),,$2))),$(call _cxU,$(subst $1!=%,%,$(filter $1%,UP!=Unbalanced!0parentheses!0within!0{...} UB!=Unbalanced!0"{"!0or!0"}"!0in!0definition G1!=Empty!0ID!0or!0PROP!0in!0{ID.PROP} G2!=Too!0many!0"."!0characters!0in!0{ID.PROP} IN!=Unexpected!0characters!0in!0{inherit...}))))$(\n)$(if $(findstring $2,$(value $3)),at: $2$(\n))in: $3$(\n)when evaluating: $(_self).$4$(\n)$(\n))
 _describeProp = $(if $1,$(if $(filter u%,$(flavor $(word 1,$1).$2)),$(call _describeProp,$(or $(_idC),$(_chp+)),$2),$(call _describeVar,$(word 1,$1).$2,   )$(if $(and $(filter r%,$(flavor $(word 1,$1).$2)),$(findstring {inherit},$(value $(word 1,$1).$2))),$(\n)$(\n)...wherein {inherit} references:$(\n)$(\n)$(call _describeProp,$(or $(_idC),$(_chp+)),$2))))
 _describeVar = $2$(if $(filter r%,$(flavor $1)),$(if $(findstring $(\n),$(value $1)),$(subst $(\n),$(\n)$2,define $1$(\n)$(value $1)$(\n)endef),$1 = $(value $1)),$1 := $(subst $(\n),$$(\n),$(subst $$,$$$$,$(value $1))))
 _eq? = $(findstring $(subst $20,1,$10),1)
