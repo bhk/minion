@@ -3,27 +3,6 @@
 
 
 ;;----------------------------------------------------------------
-;; _escape
-;;----------------------------------------------------------------
-
-;; Construct Make source code that expands to CONST, either on the RHS of a
-;; variable assignment or within a $(call ...) expression.  It is assumed
-;; that CONST does not contain '#' or newlines.
-;;
-(define (_escape const)
-  &native
-  (subst "$" "$$"
-         ")" "$]"
-         "(" "$["
-         "," "$;"
-         const))
-
-(set-native ";" ",")
-(expect "a$]$$x$;$;" (_escape "a)$x,,"))
-(expect "a)$x,," (native-call "or" (.. "$(if a," (_escape "a)$x,,") ",)")))
-
-
-;;----------------------------------------------------------------
 ;; _info, _qv, _qvn
 ;;----------------------------------------------------------------
 
@@ -127,22 +106,25 @@
 ;;----------------------------------------------------------------
 
 (withInfoHook
- (expect "" (_traceIn 1 2 3))
- (expect *info* "(_traceIn '1' '2' '3') ->\n")
- (_ti-))
+ (begin
+   (expect "" (_traceIn 1 2 3))
+   (expect *info* "(_traceIn '1' '2' '3') ->\n")
+   (_ti-)))
 
 (withInfoHook
- (expect "" (_traceIn 1 "a\nb" 3))
- (expect *info*
-         (.. "(_traceIn '1' $2 '3') ->\n"
-             "  $2:\n"
-             "    | a\n"
-             "    | b\n"))
- (_ti-))
+ (begin
+   (expect "" (_traceIn 1 "a\nb" 3))
+   (expect *info*
+           (.. "(_traceIn '1' $2 '3') ->\n"
+               "  $2:\n"
+               "    | a\n"
+               "    | b\n"))
+   (_ti-)))
 
 (withInfoHook
- (expect "3 2 1" (_traceOut "f" "3 2 1"))
- (expect *info* "(f) <- '3 2 1'\n"))
+ (begin
+   (expect "3 2 1" (_traceOut "f" "3 2 1"))
+   (expect *info* "(f) <- '3 2 1'\n")))
 
 
 (define (traceTest a ?b ?c)
@@ -154,54 +136,61 @@
 (expect 1 (traceTest 1))
 
 (withInfoHook
- (_trace "traceTest")
- (_trace "traceTest")
- (_trace "_ti+")
- (expect *info*
-         (.. "_trace: tracing traceTest ...\n"
-             "_trace: already traced traceTest\n"
-             "_trace: CANNOT trace _ti+\n"
-             )))
+ (begin
+   (_trace "traceTest")
+   (_trace "traceTest")
+   (_trace "_ti+")
+   (expect *info*
+           (.. "_trace: tracing traceTest ...\n"
+               "_trace: already traced traceTest\n"
+               "_trace: CANNOT trace _ti+\n"
+               ))))
+
 
 (withInfoHook
- (expect "$(_traceIn)$(call" (word 1 traceTest))
- (expect "$(if" (word 1 (native-value (traced-name "traceTest"))))
- (expect 1 (traceTest 1))
- (expect *info*
-         (.. "(traceTest '1') ->\n"
-             "(traceTest) <- '1'\n")))
+ (begin
+   (expect "$(_traceIn)$(call" (word 1 traceTest))
+   (expect "$(if" (word 1 (native-value (traced-name "traceTest"))))
+   (expect 1 (traceTest 1))
+   (expect *info*
+           (.. "(traceTest '1') ->\n"
+               "(traceTest) <- '1'\n"))))
+
 
 (withInfoHook
- (expect "1" (traceTest 1 2 3))
- (expect *info*
-         (.. "(traceTest '1' '2' '3') ->\n"
-             "  (traceTest '2' '3') ->\n"
-             "    (traceTest '3') ->\n"
-             "    (traceTest) <- '3'\n"
-             "  (traceTest) <- '2'\n"
-             "(traceTest) <- '1'\n")))
+ (begin
+   (expect "1" (traceTest 1 2 3))
+   (expect *info*
+           (.. "(traceTest '1' '2' '3') ->\n"
+               "  (traceTest '2' '3') ->\n"
+               "    (traceTest '3') ->\n"
+               "    (traceTest) <- '3'\n"
+               "  (traceTest) <- '2'\n"
+               "(traceTest) <- '1'\n"))))
 
 (withInfoHook
- (expect 0 (traceTest 0 "multi\nline\nvalue"))
- (expect *info*
-         (.. "(traceTest '0' $2) ->\n"
-             "  $2:\n"
-             "    | multi\n"
-             "    | line\n"
-             "    | value\n"
-             "  (traceTest $1) ->\n"
-             "    $1:\n"
-             "      | multi\n"
-             "      | line\n"
-             "      | value\n"
-             "  (traceTest) <- \n"
-             "    | multi\n"
-             "    | line\n"
-             "    | value\n"
-             "(traceTest) <- '0'\n")))
+ (begin
+   (expect 0 (traceTest 0 "multi\nline\nvalue"))
+   (expect *info*
+           (.. "(traceTest '0' $2) ->\n"
+               "  $2:\n"
+               "    | multi\n"
+               "    | line\n"
+               "    | value\n"
+               "  (traceTest $1) ->\n"
+               "    $1:\n"
+               "      | multi\n"
+               "      | line\n"
+               "      | value\n"
+               "  (traceTest) <- \n"
+               "    | multi\n"
+               "    | line\n"
+               "    | value\n"
+               "(traceTest) <- '0'\n"))))
 
 (withInfoHook
- (expect "9" (_? "_hashGet" ":a b:9" "b"))
- (expect *info*
-         (.. "(_? '_hashGet' ':a b:9' 'b') ->\n"
-             "(_? '_hashGet') <- '9'\n")))
+ (begin
+   (expect "9" (_? "_hashGet" ":a b:9" "b"))
+   (expect *info*
+           (.. "(_? '_hashGet' ':a b:9' 'b') ->\n"
+               "(_? '_hashGet') <- '9'\n"))))

@@ -3,10 +3,6 @@
 (require "compile.scm" &private)
 
 
-(define (xsee a b)
-  (or (see a b)
-      (print "*** Did not see '" a "' in '" b "'")))
-
 (set _cxInherit (lambda (p chp sv)
                   (.. "&" chp "Base." p)))
 

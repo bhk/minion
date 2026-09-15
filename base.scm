@@ -161,6 +161,7 @@
 ;; Return the alias instance if NAME is a variable name.
 ;;
 (define `(isAlias id)
+  &public
   ;; Only allow makefile-defined variables to minimize potential for
   ;; confusion with environment and make defaults (e.g. LINT.c !)
   (if (filter "f% o%" (native-origin id))
@@ -168,6 +169,7 @@
 
 (define (_isAlias name)
   &native
+  &public
   (isAlias name))
 
 
@@ -193,6 +195,13 @@
           (_isIndirect name))
       (.. "_BuildGoal(" name ")")
       (_isAlias name)))
+
+
+(define alias1 &native "x")
+
+(expect "Alias(alias1)" (_buildGoalID "alias1"))
+(expect "_BuildGoal(@alias1)" (_buildGoalID "@alias1"))
+(expect "_BuildGoal(a(b))" (_buildGoalID "a(b)"))
 
 
 ;; Assign a simple variable named NAME to VALUE; return VALUE.
@@ -284,76 +293,6 @@
   (expect "VBAR VFOO" varLog))
 
 
-;; Return the variable portion of indirection ID.  Return nil if the ID ends
-;; in @.
-;;
-;;    @VAR, C@VAR, D@C@VAR  -->  VAR, VAR, VAR
-;;
-(define (_ivar id)
-  &native
-  &public
-  (filter-out "%@" (subst "@" "@ " id)))
-
-
-(define (_EI id where)
-  &native
-
-  (_error
-   (..
-    "minion: Invalid target: '" id "'\n"
-    (if (filter "%@" id)
-        (.. "Name ends in '@'")
-        (.. "References undefined variable '" (_ivar id) "'"))
-    (if where
-        (.. "\nFound while expanding "
-            (if (filter "_BuildGoal(%" where)
-                "command line goal"
-                where)))
-    "\n\n")))
-
-
-;; WHERE = where LIST came from, e.g. "C(A).P or variable name
-;;
-(define (_expandX list where)
-  &native
-  (define `(expand var indir)
-    (if (findstring "*" var)
-        (_wildcard var)
-        (if (undefined? var)
-            (_EI indir where)
-            (_expandX (native-var var) var))))
-
-  ;; Create a pattern for indirection expansion
-  ;;      @var   ==>   %
-  ;;     C@var   ==>   C(%)
-  ;;   D@C@var   ==>   D(C(%))
-  (define `(ipat ref)
-    (if (filter "@%" ref)
-        "%"
-        (subst " " ""
-               (filter "%( %% )"
-                       (.. (subst "@" "( " ref) " % " (subst "@" " ) " ref))))))
-
-  (foreach (w list)
-    (or (isInstance w)
-        ;; after ruling out instances, "@" means indirection
-        (if (findstring "@" w)
-            (foreach (v (or (_ivar w) "=@"))
-              (patsubst "%" (ipat w) (expand v w)))
-            (or (isAlias w)
-                w)))))
-
-
-;; Expand indirections in LIST, and translate bare alias names to instances.
-;;
-;; PROP is used in reporting "Found while expanding C(A).PROP" errors
-;;
-(define (_expand list ?prop)
-  &native
-  &public
-  (_expandX list (.. _self "." prop)))
-
-
 ;; Assign a recursive variable NAME, and return NAME.
 ;;
 ;; _fset defines variables that will be reference with $(call NAME,...)  or
@@ -369,11 +308,11 @@
 
   ;; This prefix preserves leading spaces.  We don't always prepend it
   ;; because it can accumulate as values are copied to other variables.
-  (define `protect
+  (define `begin-value
     (if (filter "1" (word 1 (.. 1 value 0)))
         "$(or )"))
 
-  (native-eval (.. "$1 = " protect
+  (native-eval (.. "$1 = " begin-value
                    (subst "\n" "$(\\n)"
                           "#" "$(\\H)"
                           value)))
@@ -397,25 +336,6 @@
   (test "test_f" "   abc  \n\ndef\n")
   (test "test_f" "echo '#-> x'")
   (test "test_f" "a\\b\\\\c\\#\\"))
-
-;; Return value of VAR, evaluating it only the first time.
-;;
-(define (_once var)
-  &native
-  (define `cacheVar (.. "!o~" var))
-
-  (if (undefined? cacheVar)
-      (_set cacheVar (native-var var))
-      (native-value cacheVar)))
-
-(begin
-  ;; test _once
-  (native-eval "fv = 1")
-  (native-eval "ff = $(fv)")
-  (expect 1 (_once "ff"))
-  (native-eval "fv = 2")
-  (expect 2 (native-var "ff"))
-  (expect 1 (_once "ff")))
 
 
 ;;----------------------------------------------------------------
@@ -567,47 +487,26 @@
 (define (hookInfo value)
   (set *info* (.. *info* value "\n")))
 
-(define `(withInfoHook ...)
+(define `(withInfoHook expr)
   &public
   (let-global ((*info* "")
                (_info hookInfo))
-    ...))
+    expr))
 
 ;; _error
 
-(define *error* &public "")
+(define (xsee a b)
+  (or (see a b)
+      (print "*** Did not see '" a "' in '" b "'")))
 
-(define (hookError msg)
-  (set *error* (._. *error* [msg])))
-
-(define `(withErrorHook ...)
+(define `(expectInError expr substr)
   &public
-  (let-global ((*error* "")
+  (declare *errors* &public)
+
+  (define `(hookError msg)
+    (set *errors* (._. *errors* msg)))
+
+  (let-global ((*errors* "")
                (_error hookError))
-    ...))
-
-
-;;--------------------------------
-;; More tests...
-;;--------------------------------
-
-
-;; test _expand
-
-(set-native-fn "ev0" "")
-(set-native-fn "ev1" "a1 b1")
-(set-native-fn "ev2" "a2 @ev1 c@ev1 c(@v) D@C@ev1 E@ev0")
-(expect (_expand "E@ev0") "")
-(expect (_expand "a @ev2")
-        "a a2 a1 b1 c(a1) c(b1) c(@v) D(C(a1)) D(C(b1))")
-
-(let-global ((_error hookError)
-             (*error* nil)
-             (_self "C(A)"))
-  (expect "" (_expand "a@" "x"))
-  (expect "" (_expand "a@undef" "x"))
-  (expect 1 (see "Invalid target" (first *error*)))
-  (expect 1 (see "Found while expanding C(A).x" (first *error*)))
-  (expect 1 (see "undefined variable 'undef'" (nth 2 *error*)))
-  (expect "minion.md minion.mk" (_expand "@minion.m*"))
-  nil)
+    expr
+    (expect 1 (xsee substr *errors*))))

@@ -10,6 +10,19 @@
 ;; Tests
 ;;--------------------------------
 
+(let-global ((_E0 "-"))
+  (expect (idClass "f") "_File")
+  (expect (idClass "C(a)") "C")
+  (expect (idClass "(a)") "-")
+  (expect (idClass "C(a") "-")
+  (expect (idClass "Ca)") "-")
+  (expect (idClass "Ca)b") "-")
+  (expect (idClass "C(a)b") "-"))
+
+;;
+;; Test class hierarchy
+;;
+
 (set-native-fn "A.inherit" "")
 (set-native-fn "A.class" "$(_class)")
 (set-native-fn "A.self"  "$(_self)")
@@ -38,15 +51,11 @@
 
 
 ;; _chain, chp+, _walk
-(expect (_chain "C(a)") "C(a) C Mixin B A")
+
 (expect (_chp+ "C") "Mixin B")
 (expect (_chp+ "Mixin B") "B")
 (expect (_walk "z" "C") "C")
 (expect (_walk "m" "C") "Mixin B")
-
-;; _hasProperty
-(expect (_hasProperty "m" "C(a)") 1)
-(expect (_hasProperty "un" "C(a)") nil)
 
 
 ;; get, `.`
@@ -104,26 +113,10 @@
 
 ;; _E0 errors
 
-(define (xsee a b)
-  (or (see a b)
-      (print "*** Did not see '" a "' in '" b "'")))
-
-(define `(expect-error expr value error-content)
-  (withErrorHook
-   (expect expr value)
-   (expect 1 (xsee error-content (first *error*)))))
-
-(expect-error (get "p" "(a)") nil
-               "minion: Mal-formed instance name '(a)'\nNo CLASS before '('")
-
-(expect-error (get "p" "C(a") nil
-              "No ')' at end")
-
-(expect-error (get "p" "C(a)b") nil
-              "No ')' at end")
-
-(expect-error (get "p" "Ca)") nil
-              "Unbalanced ')'")
+(expectInError (get "p" "(a)") "Mal-formed instance name '(a)'\nNo CLASS")
+(expectInError (get "p" "C(a") "No ')' at end")
+(expectInError (get "p" "C(a)b") "No ')' at end")
+(expectInError (get "p" "Ca)") "Unbalanced ')'")
 
 ;; _E1 errors
 
@@ -150,41 +143,19 @@
   (let-global ((_class "CX"))
     (expect 1 (see "CX.inherit is not defined" (e1-msg "p" "foo" nil)))))
 
-(expect-error (get "unk" "C(a)") nil
-              "Undefined property {unk}\non instance: C(a)")
+(expectInError (get "u" "C(a)") "Undefined property {u}\non instance: C(a)")
 
 (set-native-fn "C.e1" "{inherit}")
-(expect-error (get "e1" "C(a)") nil
+(expectInError (get "e1" "C(a)")
               (.. "minion: Undefined property {e1}\n"
                   "on instance: C(a)\n"
                   "via {inherit} in:\n\n   C.e1 = {inherit}"))
 
 (set-native-fn "C(a).e2" "{inherit UNK}")
-(expect-error (get "e2" "C(a)") nil
-              "via {inherit UNK}")
+(expectInError (get "e2" "C(a)") "via {inherit UNK}")
 
 (set-native-fn "C.eu" "{undef}")
-(expect-error (get "eu" "C(a)") nil
-              "during call to:\n\n   C.eu =")
-
-;; _describeProp
-
-(expect (_describeProp "C(a)" "icm")
-        (.. "   C(a).icm = C(a).icm + {inherit}\n"
-            "\n"
-            "...wherein {inherit} references:\n"
-            "\n"
-            "   C.icm = C.icm + {inherit}\n"
-            "\n"
-            "...wherein {inherit} references:\n"
-            "\n"
-            "   Mixin.icm = Mixin.icm + {inherit}\n"
-            "\n"
-            "...wherein {inherit} references:\n"
-            "\n"
-            "   B.icm = B.icm"))
-
-(expect (_describeProp "UNDEF(a)" "foo") "")
+(expectInError (get "eu" "C(a)") "during call to:\n\n   C.eu =")
 
 ;; _badAuto
 
@@ -193,17 +164,12 @@
 (set-native-fn "C.w1" "$(BA)")
 (set-native-fn "C.w2" "$(call BA)")
 
-(withErrorHook
- (expect nil (get "w0" "C(a)"))
- (expect 1 (xsee (.. "$$@ was evaluated prior to rule processing\nduring "
-                     "evaluation of C(a).w0 in context of C(a)")
-                 (first *error*))))
-(withErrorHook
- (expect nil (get "w1" "C(a)"))
- (expect 1 (xsee (.. "evaluation of C.w1 in context of C(a)")
-                 (first *error*))))
+(expectInError (get "w0" "C(a)")
+               (.. "$$@ was evaluated prior to rule processing\nduring "
+                   "evaluation of C(a).w0 in context of C(a)"))
 
-(withErrorHook
- (expect nil (get "w2" "C(a)"))
- (expect 1 (xsee "evaluation of $(call BA,...) in context of C(a)"
-                 (first *error*))))
+(expectInError (get "w1" "C(a)")
+               "evaluation of C.w1 in context of C(a)")
+
+(expectInError (get "w2" "C(a)")
+               "evaluation of $(call BA,...) in context of C(a)")

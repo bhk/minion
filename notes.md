@@ -247,17 +247,6 @@ name within `rule` (in the Make rule, .PHONY)
    due to stale cache, (B) the goals are non-trivial yet are entirely
    outside the cache.
 
- * Allow instances to easily select "lazy" recipes, so that their command
-   will be evaluated only if the target is stale. However, this provides no
-   savings when vv includes {command}.  The only *actual* case right now is
-   Makefile[minionCache], which does this on its own.  And Makefile would
-   need a way to convert lazy rules into non-lazy:
-
-      ;; assumes no '$@' or other rule-processing-phase-only vars
-      (if (findstring "$" (subst "$$" "" rule))
-         (subst "$" "$$" (native-call "or" rule)))
-
-
 ### Possible Arg Syntax
 
     $(_args)                -->  {:*}
@@ -273,7 +262,6 @@ but I have no evidence of it at the moment so it has been removed:
 
     # Disable Make's built-in implicit pattern rules (they can slow things down)
     @echo 'a:' | $(MAKE) -pf - | sed '/^[^: ]*%[^: ]*\::* /!d' >> {@}_tmp_
-
 
 
 ## On Build Systems

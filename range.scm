@@ -32,7 +32,6 @@
 ;; (MAX - MIN).
 ;;
 (define (_range min max)
-  &native
   &public
   (define `(trimLeadingZeros list)
     (subst " 0000" " "
@@ -43,10 +42,8 @@
   (if (subst 0 "" max)
       (wordlist min max (trimLeadingZeros (_rxn digits max)))))
 
-
 (expect "" (_range 1 0))
 (expect "1" (_range 1 1))
 (expect "8 9 10 11 12" (_range 8 12))
 
-(show-export "_rxn")
-(show-export "_range")
+(print (extract-exports))

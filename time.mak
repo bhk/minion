@@ -1,6 +1,8 @@
-# time.mk: Some benchmarking targets
-include test-utils.mk
+#------------------------------------------------------------------------
+# Some targets and classes for benchmarking
+#------------------------------------------------------------------------
 
+include test-utils.mk
 
 default =
 all = xi xi2

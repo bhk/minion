@@ -1,5 +1,5 @@
 ;;----------------------------------------------------------------
-;; Minion "Tools" functions
+;; Functions used by built-in and/or user classes
 ;;----------------------------------------------------------------
 
 (require "core")
@@ -8,7 +8,7 @@
 
 
 ;;----------------------------------------------------------------
-;; Shell-related tools
+;; Shell- and command-related tools
 ;;----------------------------------------------------------------
 
 ;; Quote ARG for inclusion on the BASH command line
@@ -28,6 +28,119 @@
            "\n" "\\n"
            value))
   (.. "printf \"%b\" " (_shellQuote escaped)))
+
+
+;; Generate a relative path from FROM to TO
+;;
+(define (_relpath from to)
+  &native
+  (if (filter "/%" to)
+      to
+      (if (filter ".." (subst "/" " " from))
+          (error (.. "_relpath: '..' in " from))
+          (or (foreach (f1 (filter "%/%" (word 1 (subst "/" "/% " from))))
+                (_relpath (patsubst f1 "%" from)
+                          (if (filter f1 to)
+                              (patsubst f1 "%" to)
+                              (.. "../" to))))
+              to))))
+
+
+;;
+;; _unique: Return unique entries in LIST without sorting
+;;
+
+(define (_uniq2 list)
+  &native
+  (if list
+      (._. (word 1 list) " " (_uniq2 (filter-out (word 1 list) list)))))
+
+(define (_unique list)
+  &native
+  (define `(pquote value)
+    (subst "^" "^c"
+           "%" "^p" value))
+
+  (define `(punquote value)
+    (subst "^p" "%"
+           "^c" "^" value))
+
+  (strip (punquote (_uniq2 (pquote list)))))
+
+
+;;----------------------------------------------------------------
+;; Rule-generation
+;;----------------------------------------------------------------
+
+
+;; Return the variable portion of indirection ID.  Return nil if the ID ends
+;; in @.
+;;
+;;    @VAR, C@VAR, D@C@VAR  -->  VAR, VAR, VAR
+;;
+(define (_ivar id)
+  &native
+  &public
+  (filter-out "%@" (subst "@" "@ " id)))
+
+
+(define (_EI id where)
+  &native
+
+  (_error
+   (..
+    "minion: Invalid target: '" id "'\n"
+    (if (filter "%@" id)
+        (.. "Name ends in '@'")
+        (.. "References undefined variable '" (_ivar id) "'"))
+    (if where
+        (.. "\nFound while expanding "
+            (if (filter "_BuildGoal(%" where)
+                "command line goal"
+                where)))
+    "\n\n")))
+
+
+;; WHERE = where LIST came from, e.g. "C(A).P or variable name
+;;
+(define (_expandX list where)
+  &native
+  (define `(expand var indir)
+    (if (findstring "*" var)
+        (_wildcard var)
+        (if (undefined? var)
+            (_EI indir where)
+            (_expandX (native-var var) var))))
+
+  ;; Create a pattern for indirection expansion
+  ;;      @var   ==>   %
+  ;;     C@var   ==>   C(%)
+  ;;   D@C@var   ==>   D(C(%))
+  (define `(ipat ref)
+    (if (filter "@%" ref)
+        "%"
+        (subst " " ""
+               (filter "%( %% )"
+                       (.. (subst "@" "( " ref) " % " (subst "@" " ) " ref))))))
+
+  (foreach (w list)
+    (or (isInstance w)
+        ;; after ruling out instances, "@" means indirection
+        (if (findstring "@" w)
+            (foreach (v (or (_ivar w) "=@"))
+              (patsubst "%" (ipat w) (expand v w)))
+            (or (isAlias w)
+                w)))))
+
+
+;; Expand indirections in LIST, and translate bare alias names to instances.
+;;
+;; PROP is used in reporting "Found while expanding C(A).PROP" errors
+;;
+(define (_expand list ?prop)
+  &native
+  &public
+  (_expandX list (.. _self "." prop)))
 
 
 ;; Encode DATA to be shell-safe (within single quotes) and Make-safe (within
@@ -54,13 +167,57 @@
   (.. "." enc "."))
 
 
-;; Encode CODE for inclusion in a recipe so that it will be expanded when
-;; and only if the recipe is executed.  This exists as a way through the
-;; escaping performed by _recipe, which ordinarily prevents expansion.
+;; Encode CODE for inclusion in a recipe so that it will be expanded again
+;; if and only if the recipe is executed.  This bypasses the escaping
+;; performed by _recipe, which ordinarily prevents expansion.  It might be
+;; valuable when the rule involves a very expensive Make computation.
+;; For example, consider these possible {command} values:
+;;
+;; @echo '$(call fn,X)'                -> OK
+;; @echo '$$(call fn,X)'               -> displays "$$(call fn,FOO)"
+;; @echo '$(call _lazy,$$(call fn,X))' -> OK, computed later
 ;;
 (define (_lazy code)
   &native
   (subst "$" "\x1B" code))
+
+
+;; Encode CONST to survive a second round of expansion in any Make
+;; expression context.  This is useful with _lazy to include values computed
+;; during property evaluation, because object properties are not available
+;; during the rule processing phase.  Some example {command} values:
+;;
+;; A: @echo '$(call fn,{x})'                                -> OK
+;; B: @echo '$(call _lazy,$$(call fn,{x}))'                 -> INCORRECT
+;; C: @echo '$(call _lazy,$$(call fn,$(call _escape,{x}))'  -> OK
+;;
+;; In case C, `{}` is evaluated during property evaluation, but `fn` is
+;; invoked when and if the recipe is executed.  The resulting value should
+;; be the same as case A.
+;;
+;; In case B, {} will be evaluated during property evaluation and included
+;; as part of the lazy expression, but if its value contains `$ or `,`
+;; characters or unbalanced parentheses, the expansion of `$(call fn,...)`
+;; during the rule processing phase will be inconsistent.
+;;
+(define (_escape const)
+  &native
+  (subst "$" "$$"
+         ")" "$]"
+         "(" "$["
+         "," "$;"
+         const))
+
+(set-native ";" ",")
+
+;; Escape a recipe to avoid another round of expansion during the rule
+;; phase.
+;;
+(define `(_escapeR str)
+  &public
+  (subst "$" "$$"
+         "\x1B" "$"
+         str))
 
 
 ;; Encode COMMANDS for inclusion in a Make rule.  Tabs are inserted at the
@@ -70,21 +227,11 @@
 ;;
 (define (_recipe commands)
   &native
-  ;; indent lines and remove empty lines
-  (define `fix-lines
-    (subst "\t\n" ""
-           (.. (subst "\n" "\n\t" (.. "\t" commands)) "\n")))
-  (subst "$" "$$"
-         "\x1B" "$"
-         fix-lines))
+  (_escapeR
+   ;; indent lines and remove empty lines
+   (subst "\t\n" ""
+          (.. (subst "\n" "\n\t" (.. "\t" commands)) "\n"))))
 
-(expect "\ta$$b\n\tc\n" (_recipe "a$b\n\nc"))
-(expect "\ta$b\n" (_recipe (_lazy "a$b")))
-
-
-;;----------------------------------------------------------------
-;; _inferIDs
-;;----------------------------------------------------------------
 
 ;; Infer intermediate instances given a set of input IDs and a MAP
 ;; containing pairs `CLASSNAME.SUFFIX`.
@@ -108,17 +255,6 @@
       inferred
       ids))
 
-(set-native "IC(a.c).out" "out/a.o")
-(set-native "IP(a.o).out" "out/P/a")
-(set-native "IP(IC(a.c)).out" "out/IP_IC/a")
-
-
-(expect (_inferIDs "a.x a.o IC(a.c)" "IP.o")
-        "a.x IP(a.o) IP(IC(a.c))")
-
-(expect (_inferIDs "y a.x a.o IC(a.c)" "IP.o")
-        "y a.x IP(a.o) IP(IC(a.c))")
-
 
 ;;----------------------------------------------------------------
 ;; rollups: Traverse instances and their {needs} transitively.
@@ -134,15 +270,15 @@
 ;;   H: In help messages that list direct & indirect dependencies.
 ;;
 ;; Case H is simple: just transitively follow {needs}.  Cases E & C would be
-;; simple if we were just caching rules, but we also want to avoid the cost
-;; of rollups when a cache is present ... it can take 5s in a 30,000-rule
-;; project without a cache versus milliseconds with one.  (The time spent is
-;; not algorithm-sensitive; just evaulating {needs} once for each instance
-;; takes the bulk of the time.)
+;; simple if we were only caching rules, but we also cache *rollups* to
+;; avoid the cost of rollups when a cache is present ... it can take 5s in a
+;; 30,000-rule project without a cache versus milliseconds with one.  (The
+;; time spent is not algorithm-sensitive; just evaulating {needs} once for
+;; each instance takes the bulk of the time.)
 ;;
 ;; The approach is to define a "needs var" in the cache file for each cached
-;; ID conveys the un-cached IDs on which the ID depends *transitively*.
-;; This requires the following:
+;; ID that lists the *un-cached* rollups for that ID. This requires the
+;; following:
 ;;
 ;;   C: Generate transitive dependencies *per-instance*.  To do this
 ;;      without terrible performance, _rollup uses memoization.
@@ -176,19 +312,9 @@
      (._. i (_rollupOne i)))))
 
 
-(define (_rollupSimple ids ?prev-seen)
-  &native
-  &public
-  (define `seen (._. prev-seen ids))
-  (define `deps (sort (isInstance (get "needs" ids))))
-  (if ids
-      (_rollupSimple (filter-out seen deps) seen)
-      (isInstance prev-seen)))
-
-
 ;; Return IDS and their transitive dependencies that are instances,
 ;; excluding those listed in EXCLUDES.  For instances that are in EXCLUDES,
-;; use $($(_i_cachedNeeds)) rather than {needs} to obtain their
+;; use $(rulecache-needs-var) rather than {needs} to obtain their
 ;; dependencies.
 ;;
 (define (_rollupEx ids excludes ?seen)
@@ -204,63 +330,6 @@
                  excludes
                  (._. seen ids))
       (filter-out excludes seen)))
-
-
-;; Test _rollupOne, _rollup, _rollupEx
-(set-native "R(a).needs" "R(b) R(c) x y z")
-(set-native "R(b).needs" "R(c) R(d) x y z")
-(set-native "R(c).needs" "R(d)")
-(set-native "R(d).needs" "R(e)")
-(set-native "R(e).needs" "")
-
-(expect (_rollupOne "R(a)")
-        "R(b) R(c) R(d) R(e)")
-
-(expect (_rollup "R(a)")
-        "R(a) R(b) R(c) R(d) R(e)")
-
-(expect (strip (_rollupEx "R(a)" ""))
-        "R(a) R(b) R(c) R(d) R(e)")
-
-(expect (strip (_rollupEx "R(a)" "R(d)"))
-        "R(a) R(b) R(c)")
-
-(set-native (rulecache-needs-var "R(d)") "R(x)")
-(set-native "R(x).needs" "")
-
-(expect (strip (_rollupEx "R(a)" "R(d)"))
-        "R(a) R(b) R(c) R(x)")
-
-(expect (_rollupSimple "R(a)")
-        "R(a) R(b) R(c) R(d) R(e)")
-
-
-;;----------------------------------------------------------------
-;; _relpath
-;;----------------------------------------------------------------
-
-;; Generate a relative path from FROM to TO
-;;
-(define (_relpath from to)
-  &native
-  (if (filter "/%" to)
-      to
-      (if (filter ".." (subst "/" " " from))
-          (error (.. "_relpath: '..' in " from))
-          (or (foreach (f1 (filter "%/%" (word 1 (subst "/" "/% " from))))
-                (_relpath (patsubst f1 "%" from)
-                          (if (filter f1 to)
-                              (patsubst f1 "%" to)
-                              (.. "../" to))))
-              to))))
-
-
-(expect (_relpath "a/b/c" "/x") "/x")
-(expect (_relpath "a" "x/y") "x/y")
-(expect (_relpath "a/b" "x/y") "../x/y")
-(expect (_relpath "x/b" "x/y") "y")
-(expect (_relpath "a/b/c"
-                  "a/x/y") "../x/y")
 
 
 ;;----------------------------------------------------------------
@@ -298,29 +367,12 @@
            D1 D
            groups)))
 
-(expect (_group "a | c d e f g h" 3)
-        "a|0|1|0c d|0e|0f g|0h|0")
-
-(define `(group-test list n out)
-  (expect (foreach (g (_group list n))
-            (.. "<" (foreach (i (_ungroup g)) i) ">"))
-          out))
-
-(group-test "a b c"    1 "<a> <b> <c>")
-(group-test ""         2 "")
-(group-test "a"        2 "<a>")
-(group-test "a b"      2 "<a b>")
-(group-test "a b c"    2 "<a b> <c>")
-(group-test "a b c d e f g h"  3 "<a b c> <d e f> <g h>")
-
 
 ;;----------------------------------------------------------------
 ;; _graphDeps, _graph, _traverse
 ;;----------------------------------------------------------------
 
 (declare (_graph fn-ch fn-names cxt nodes ?slots ?out) &native)
-(declare (_traverse children-fn children-cxt nodes ?seen) &native)
-(declare (_graphDeps children-fn name-fn cxt nodes) &native)
 
 (begin
   ;; This delimiter must not appear anywhere in node names
@@ -408,113 +460,36 @@
     (if nodes
         ;; Output lines for this node.
         (_graph ch-fn name-fn cxt (rest nodes) newSlots newOut)
-        out))
-
-  (define `test-graph
-    { 0: [1 2 4],
-      1: [3],
-      2: [3],
-      A: "D C B",
-      B: "C E",
-      C: "D",
-      })
-
-  (define (test-children G node)
-    (dict-get node G))
-
-  (define (test-name cxt node)
-    (if (filter 3 node)
-        (.. "<" node ">")
-        node))
-
-  (expect
-   (concat-vec [""
-                "0"
-                "|  "
-                "+-> 1"
-                "|   |  "
-                "+-> |   2"
-                "|   |   |  "
-                "|   +-> +-> <3>"
-                "|  "
-                "+-> 4"
-                ""]
-               "\n")
-   (_graph (native-name test-children) (native-name test-name) test-graph
-           "0 1 2 3 4"))
+        out)))
 
 
-  ;; Return list of descendants of NODES, ordered such that all parents
-  ;; precede their children.
-  ;;
-  ;; CF = name of function to get children of a node
-  ;; CC = context to pass to CF
-  ;;
-  ;;     (native-call CF CC node) -> children of node
-  ;;
-  (define (_traverse cf cc nodes ?seen)
-    &native
-    (define `parent
-      (word 1 nodes))
-
-    (if parent
-        (_traverse cf
-                   cc
-                   (._. (native-call cf cc parent) (rest nodes))
-                   (._. (filter-out parent seen) parent))
-        seen))
-
-  (expect "A B C D E"
-          (_traverse (native-name test-children) test-graph "A"))
-
-
-  ;; Combine _graph and _traverse
-  ;;
-  (define (_graphDeps cf name-fn cxt nodes)
-    &native
-    (_graph cf name-fn cxt (_traverse cf cxt nodes)))
-
-  ;; Display a sample graph.
-  ;; (print (_graphDeps (native-name test-children) (native-name test-name) test-graph "A"))
-
-  nil)
-
-;;----------------------------------------------------------------
-;; _uniq
-;;----------------------------------------------------------------
-
-
-(define `(pquote value)
-  (subst "^" "^c"
-         "%" "^p" value))
-
-(define `(punquote value)
-  (subst "^p" "%"
-         "^c" "^" value))
-
-(define (_uniqQ list)
-  &native
-  (if list
-      (._. (word 1 list) " " (_uniqQ (filter-out (word 1 list) list)))))
-
-;; Return unique entries in LIST without sorting
+;; Return list of descendants of NODES, ordered such that all parents
+;; precede their children.
 ;;
-(define (_unique list)
+;; CF = name of function to get children of a node
+;; CC = context to pass to CF
+;;
+(define (_traverse cf cc nodes ?seen)
   &native
-  (strip (punquote (_uniqQ (pquote list)))))
+  (define `parent (word 1 nodes))
+  (define `children (native-call cf cc parent))
+  (define `next-seen (._. (filter-out parent seen) parent))
 
-(expect (_unique "a b a c a b c c") "a b c")
-(expect (_unique "a b % ^ a b % ^") "a b % ^")
+  (if parent
+      (_traverse cf cc (._. children (rest nodes)) next-seen)
+      seen))
+
+
+;; Combine _graph and _traverse
+
+(define (_graphDeps cf name-fn cxt nodes)
+  &native
+  (_graph cf name-fn cxt (_traverse cf cxt nodes)))
 
 
 ;;----------------------------------------------------------------
 ;; Rule cache generation
 ;;----------------------------------------------------------------
-
-;; TODO
-(declare (_isAlias name) &native &public)
-(declare (_isInstance name) &native &public)
-(declare (_isIndirect name) &native &public)
 
 
 ;; Escape VALUE for inclusion literally in `ifeq "..." "..."` contexts.

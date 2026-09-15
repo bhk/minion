@@ -1,8 +1,58 @@
 (require "core")
-
 (require "base.scm")
 (require "objects.scm")
 (require "tools.scm")
+
+(declare *err* &native)
+
+
+;; Set FN to VALUE and return RETVAL
+(define (_fswap fn value retval)
+  &native
+  (_fset fn value)
+  retval)
+
+
+(define `(catchErrorIn expr)
+  (define `(saveError msg)
+    (_set "*err*" (or msg "-")))
+
+  (_fswap "_error" (_fswap "_error" saveError _error) expr)
+  *err*)
+
+
+;; Return `.PROP` if GOAL ends in `).PROP` and PROP does not contain `)`.
+;; Nil otherwise.
+;;
+(define `(isProp goal)
+  (if (findstring ")." goal)
+      (filter-out ". %)" (subst ")" ") " goal))))
+
+
+;; Return the class portion of instance ID.  Return nil if ID has no "(", no
+;; ")", or begins with "(".
+;;
+(define `(idc id)
+  (filter-out "|% %)" (subst "(" " |" (filter "%)" id))))
+
+
+;; Return inheritance chain (a list of all the classes that will be
+;; searched, in order) for CHP (zero or more classes).
+;;
+(define (_chain chp ?seen)
+  &native
+  (if chp
+      (_chain (_chp+ chp) (._. seen (word 1 chp)))
+      (strip seen)))
+
+
+;; Return 1 if some definition of P is present for ID
+;;
+(define (_hasProperty p id)
+  &native
+  (if (native-strip (foreach (scope (_chain id))
+                      (defined? (.. scope "." p))))
+      1))
 
 
 (define (_fmtList ids)
@@ -19,37 +69,25 @@
       "Indirect dependencies: " (_fmtList (filter-out needs (_rollup needs)))))
 
 
-(define (_isProp goal)
-  &native
-  (filter ").%" (lastword (subst ")" " )" goal))))
-
-
-(define (_helpInvalidClass goal)
+(define (_helpOnInvalidClass goal)
   &native
   (.. "\"" goal "\" looks like an instance with an invalid class name;\n"
-      "`$" (_idC goal) ".inherit` is not defined.  Perhaps a typo?\n"))
+      "`$" (idc goal) ".inherit` is not defined.  Perhaps a typo?\n"))
 
 
-;; escape for expansion (TODO: factor with lazy & recipe)
-;;
-(define (_renc str)
-  &native
-  (subst "\x1b" "$" (subst "$" "$$" str)))
-
-
-(define (_helpInstance id)
+(define (_helpOnInstance id)
   &native
   (.. id " is an instance.\n\n"
       "{out} = " (get "out" id) "\n\n"
       (if (_hasProperty "command" id)
-          (.. "Command: " (_qvn (_renc (get "command" id))))
+          (.. "Command: " (_qvn (_escapeR (get "command" id))))
           (.. "{rule} = " (_qvn (get "rule" id))))
       "\n"
       "\n"
       (_helpDeps id) "\n"))
 
 
-(define (_helpIndirect goal)
+(define (_helpOnIndirect goal)
   &native
   (.. "\"" goal "\" is an indirection on the following "
       (if (findstring "*" (_ivar goal))
@@ -59,7 +97,7 @@
       "It expands to the following targets: " (_fmtList (_expand goal)) "\n"))
 
 
-(define (_helpAlias goal)
+(define (_helpOnAlias goal)
   &native
   (.. "\"" goal "\" is an alias for " (_isAlias goal) ".\n"
       "\n"
@@ -70,43 +108,72 @@
       "It generates the following rule: " (_qvn (get "rule" (_isAlias goal)))))
 
 
-;; # $1 = C(A).P; $2 = description;  $(id) = C(A); $p = P
-(define (_helpPropertyInfo goal desc id p)
+(define (_describeProp chp prop)
   &native
+  (define `(recur)
+    (_describeProp (_chp+ chp) prop))
+
+  (define `var
+    (.. (word 1 chp) "." prop))
+
+  (define `has-inherit
+    (and (recursive? var)
+         (findstring "{inherit}" (native-value var))))
+
+  (if chp
+      (if (undefined? var)
+          (recur)
+          (.. (_describeVar var "   ") "\n"
+              (if has-inherit
+                  (.. "\n...wherein {inherit} references:\n\n" (recur)))))
+      "   <missing definition!>\n"))
+
+
+;; Show definitions
+(define `(propertyInfo p id)
   (.. ""
-      "" id " inherits from: " (_chain (_idC id)) "\n"
+      "" id " inherits from: " (_chain (idc id)) "\n"
       "\n"
-      "{" p "} " (if (if desc "" goal) ;; TODO
-                     "is not defined!"
-                     (.. "is defined by:\n"
-                         "\n"
-                         desc "\n"
-                         "\n"
-                         "Its value is: " (_qv (get p id))))
-      "\n"
-      "\n"))
+      "{" p "} " (if (_hasProperty p id)
+                     (.. "is defined by:\n\n"
+                         (_describeProp id p))
+                     "is not defined!")))
 
 
-(define (_helpProperty goal)
+(define `(propertyValue p id)
+  (..
+   (if (catchErrorIn (get p id))
+       (.. "Its evaluation results in an error:\n" *err*)
+       (.. "Its value is: " (_qv (get p id))))
+   "\n\n"))
+
+
+(define (_helpOnProperty goal)
   &native
-  (foreach (p (or (lastword (subst ")." ") " goal))
-                  (error (.. "Empty property name in " goal))))
-    (foreach (id (patsubst (.. "%)." p) "%)" goal))
-      (_helpPropertyInfo goal (_describeProp id p) id p))))
+  (foreach (p (patsubst ".%" "%" (isProp goal)))
+    (foreach (id (patsubst (.. "%." p) "%" goal))
+      (_info (propertyInfo p id))  ;; output before trying evaluation
+      (propertyValue p id))))
 
 
-(define (_helpOther goal)
+(define (_helpOnOther goal)
   &native
   (.. "Target " goal " is not generated by Minion.  It may be a source\n"
       "file or a target defined by a rule in the Makefile."))
 
 
-(define (_goalType goal)
+;; True when ID -- which must be an instance -- has an invalid class name.
+;;
+(define `(isClassInvalid id)
+  (undefined? (.. (idc id) ".inherit")))
+
+
+(define (_helpType goal)
   &native
-  (if (_isProp goal)
+  (if (isProp goal)
       "Property"
       (if (_isInstance goal)
-          (if (_isClassInvalid goal)
+          (if (isClassInvalid goal)
               "InvalidClass"
               "Instance")
           (if (_isIndirect goal)
@@ -117,4 +184,4 @@
 
 (define (_help! goal)
   &native
-  (print (native-call (.. "_help" (_goalType goal)) goal)))
+  (print (native-call (.. "_helpOn" (_helpType goal)) goal)))

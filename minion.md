@@ -707,10 +707,6 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
   Return "1" if `A` and `B` are equal, "" otherwise.
 
-* `$(call _once,VAR)`
-
-  Return the value of `VAR`, evaluating it at most once.
-
 * `$(_self)`
 
   Return the name of the current instance.

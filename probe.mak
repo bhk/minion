@@ -1,9 +1,60 @@
-# Testbed for examining Make's behavior
+#------------------------------------------------------------------------
+# Testbed for testing and examining Make's behavior
+#------------------------------------------------------------------------
+
+probeFile := $(lastword $(MAKEFILE_LIST))
+makeThis = $(MAKE) -f $(probeFile)
+
+\s := $(if ,, )
+\t := $(if ,,	)
+\H := \#
+\q = "#"
+[ := (
+] := )
+define \n
+
+
+endef
+
+_eq? = $(findstring $(subst $20,1,$10),1)
+_qv = '$1'
+
+# $(call _expectEQ,A,B): error (with diagnostics) if A is not the same as B
+#
+_expectEQ = #
+true = $(if $1,1)
+not = $(if $1,,1)
+
+ifneq "" "$(filter default,$(or $(MAKECMDGOALS),default))"
+  _expectEQ = $(if $(call _eq?,$1,$2),,$(error Values differ:$(\n)A: $(_qv)$(\n)B: $(call _qv,$2)$(\n)))
+  $(info probe.mak: testing...)
+else
+  SKIPTESTS = 1
+endif
+
+
+default: ;@true
+
+
+#------------------------------------------------------------------------
+# Tests & interactive targets
+#------------------------------------------------------------------------
 
 #
-# var: Show value of $(var) in a this instance and an empty makefile.
+# double-expansion of expressions (currently used in `.`)
 #
-#  * `make var var=MAKEFLAGS -j2`:  MAKEFLAGS differs between
+
+$(call _expectEQ,file,$(call or,$$(origin _qv)))
+
+
+#
+# var: Show value of $(var) in different stages:
+#
+#    1. Reading phase: makefile parsing & immediate expansion
+#    2. Rule processing: recipe expansion/running
+#    3. In an empty sub-make's reading phase (inherited variables)
+#
+#  * `make var var=MAKEFLAGS -j2`: shows that MAKEFLAGS differs between
 #    reading and rule processing phases.
 #
 #  * MAKEFLAGS & MFLAGS: Parsing MAKEFLAGS to detect `-r`, etc, is
@@ -41,14 +92,15 @@ flagdiff: ; @true\
 
 
 #
-# Demonstrate parallelization
+# Demonstrate parallelization & sub-make problems
 #
 #   * `make par` takes 5 seconds
 #   * `make par -j5` takes 1 second.
 #   * `make par setflags=-j5` takes 1 second => setting MAKEFLAGS=-jN
 #     affects the current Make instance.
+#  * `make submake setflags=-j5` warns "disabling jobserver".
+#    Setting MAKEFLAGS=-jN creates this problem with submakes.
 #
-
 ifdef setflags
   $(info MAKEFLAGS := $(setflags))
   MAKEFLAGS := $(setflags)
@@ -58,17 +110,9 @@ par: 1.sleep 2.sleep 3.sleep 4.sleep 5.sleep
 
 %.sleep: ; @echo $* start && sleep 1 && echo $* end
 
+submakeGoal ?= par
 
-#
-# Invoke self as sub-make
-#
-#  * `make submake setflags=-j5` warns "disabling jobserver".
-#    Setting MAKEFLAGS=-jN creates this problem with submakes.
-#
-
-submake ?= par
-
-submake: ; @$(MAKE) -f $(word 1,$(MAKEFILE_LIST)) $(submake)
+submake: ; @$(makeThis) $(submakeGoal)
 
 
 #
@@ -92,10 +136,10 @@ lazy2-test: ; $(lazyRecipe)
 
 
 #
-# Odd variable names
+# Variable name characters
 #
-#  * We can define and use @ prior to rule processing phase, but during rule
-#    processing phase it will use Make's automatic definition.
+#  * We can define and use '@' prior to rule processing phase, but during
+#    rule processing phase it will use Make's automatic definition.
 #
 #  * $(VAR) is a problem when VAR contains ":" ... even if it is expanded
 #    from a var or function call.
@@ -113,6 +157,44 @@ lazy2-test: ; $(lazyRecipe)
 #       a$(if ,,\#)b =
 #       @ = var-test now; but was MYDEF before rule processing.
 #
+# For Minion, we care only about:
+#
+#  * Spaces, which might appear in some memoization variables.
+#
+#  * Parentheses are used in instance names, and in turn instance-specific
+#    property definitions.  These characters break $(VAR) and $(call VAR),
+#    but fortunately not `$(value VAR)`, which is what we use when reading
+#    property definitions.
+#
+#  * The following are allowed in class argument lists, and in turn instance
+#    names, so assigning instance-specific properties woudld require
+#    variable names that include them: :, =, *, <, >
+#
+#    Note that $(var:...=...) conflicts with Make's pattern substitution
+#    syntax.
+#
+
+a b = A B
+a<b = A<B
+a>b = A>B
+p* = P*
+a$(if ,,:)b = A:B
+a$(if ,,=)b = A=B
+C(a).p = CAP
+
+$(call _expectEQ,A B,$(a b))
+$(call _expectEQ,A<B,$(a<b))
+$(call _expectEQ,A>B,$(a>b))
+$(call _expectEQ,P*,$(p*))
+$(call _expectEQ,A:B,$(a:b))
+$(call _expectEQ,A=B,$(a=b))
+$(call _expectEQ,CAP,$(value C(a).p))
+
+# Supposedly in Make 3.82 "x y=1" does not work whereas "x$(if ,, )y=1" does.
+x$(if ,, )y = X Y
+$(call _expectEQ,X Y,$(x y))
+
+# other cases...
 
 E = =
 C = :
@@ -121,18 +203,14 @@ L = (
 R = )
 P = %
 
+# a and b below illustrate how Make interprets expressions
 a = !A!
 b = !B!
-a b = A B
-a<b = A<B
-a>b = A<B
-a$(if ,,=)b = A=B
-a$(if ,,:)b = A:B
 a$(if ,,\#)b = A\#B
 a)b = A)B
 a(b)c = A(B)C
+abcName = a(b)c
 a$(if ,,:%=%)b = A:%=%B
-
 
 @ = MYDEF
 
@@ -141,7 +219,7 @@ ifneq "$@" "MYDEF"
   $(error Cannot override "@" prior in expansion phase)
 endif
 
-var-test:
+show-vars:
 	@echo '$$(a b)             = $(a b)'
 	@echo '$$(a>b)             = $(a>b)'
 	@echo '$$(a$$En)            = $(a$Eb)'
@@ -154,6 +232,7 @@ var-test:
 	@echo '$$(a)b)             = $(a$Rb)'
 	@echo '$$(call a)b)        = $(call a$Rb)      ***'
 	@echo '$$(call a(b)c)      = $(call a(b)c)         ***'
+	@echo '$$(call $$(abcName)) = $(call a(b)c)         ***'
 	@echo '$$(@) = $@ now; but was $(PRE@) before rule processing.'
 
 
@@ -200,38 +279,31 @@ wc10: a\=b ; @echo '$$@ = "$@";  $$^ = "$^"'
 # Examine escaping of characters in `ifeq`, etc.
 #
 
-\s := $(if ,, )
-\t := $(if ,,	)
-\H := \#
-[ := (
-] := )
-\q = "#"
-define \n
+ifndef SKIPTESTS
 
+  enc1 := a\$(\H)\\$(\H)\\\$(\H)
 
-endef
+  # test ifeq syntax
+  # Funny encoding of backslashes that precede # !
+  ifneq ($(enc1),a\\\#\\\\\#\\\\\\\#)
+    $(error FAILURE)
+  endif
 
+  enc2 := $(\s)$(\t)\a\\b,$(\n)"c))(d\#e"
 
-# Funny encoding of backslashes that precede # !
-enc1 := a\$(\H)\\$(\H)\\\$(\H)
-ifneq ($(enc1),a\\\#\\\\\#\\\\\\\#)
-  $(error FAILURE)
-endif
+  # Parenthesis encoding: needs to escape leading spaces, $, parens, #, \n
+  #  
+  ifneq ($(enc2), $(\s)	\a\\b,$(\n)"c$]$]$[d\#e")
+    $(info A = '$(enc2)')
+    $(info B = ' $(\s)	\a\\b,$(\n)"c$]$]$[d\#e"')
+    $(error FAILURE)
+  endif
 
-enc2 := $(\s)$(\t)\a\\b,$(\n)"c))(d\#e"
-
-# Parenthesis encoding: needs to escape leading spaces, $, parens, #, \n
-#  
-ifneq ($(enc2), $(\s)	\a\\b,$(\n)"c$]$]$[d\#e")
-  $(info A = '$(enc2)')
-  $(info B = ' $(\s)	\a\\b,$(\n)"c$]$]$[d\#e"')
-  $(error FAILURE)
-endif
-
-# Double-quote encoding: need to escape $, ", #, \n
-#
-ifneq "$(enc2)" " 	\a\\b,$(\n)$(\q)c))(d\#e$(\q)"
-  $(error FAIL)
+  # Double-quote encoding: need to escape $, ", #, \n
+  #
+  ifneq "$(enc2)" " 	\a\\b,$(\n)$(\q)c))(d\#e$(\q)"
+    $(error FAIL)
+  endif
 endif
 
 

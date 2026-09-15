@@ -10,7 +10,6 @@
 ;;    - Property evaluation is memoized (per instance & property)
 ;;
 
-(require "core")
 (require "export.scm")
 (require "base.scm")
 (require "compile.scm")
@@ -50,40 +49,15 @@
           (_E0)
           "_File")))
 
-(let-global ((_error "-"))
-  (expect (idClass "f") "_File")
-  (expect (idClass "C(a)") "C")
-  (expect (idClass "(a)") "-")
-  (expect (idClass "C(a") "-")
-  (expect (idClass "Ca)") "-")
-  (expect (idClass "Ca)b") "-")
-  (expect (idClass "C(a)b") "-"))
-
-
-;; Return the class portion of a well-formed instance, or nil if ID contains
-;; no "(".
-;;
-(define (_idC id)
-  &native
-  &public
-  (if (findstring "(" id)
-      (word 1 (subst "(" " " id))))
-
-
-;; True when ID -- which must be an instance -- has an invalid class name.
-;;
-(define (_isClassInvalid id)
-  &public
-  &native
-  (undefined? (.. (_idC id) ".inherit")))
-
 
 ;; Chain positions (CHP): a chain position describes the state of iteration
-;; through the inheritance chain.  It is a list of zero or more classes, or
-;; a single instance name.  Chain positions are single words (the current
-;; class) unless multiple inheritance is encountered.
+;; through the inheritance chain.  The first word is an instance name or
+;; class name, and any subsequent words are classes to be searched after the
+;; first word's inheritance is exhausted (multiple inheritance).
 ;;
-;;  (word 1 CHP) = current class
+;; Chain positions start at the instance name.
+;;
+;;  (word 1 CHP) = current scope
 ;;  (_chp+ CHP) = next CHP in inheritance chain; nil => done
 ;;
 
@@ -91,10 +65,11 @@
 ;;
 (define (_chp+ chp)
   &native
+  &public
   ;; Here filter-out removes the first name in CHP and stips extraneous
   ;; spaces from the result.
-  (if (filter "%)" chp)
-      (_idC chp)
+  (if (findstring "(" chp)
+      (filter-out "|%" (subst "(" " |" chp))
       (filter-out
        "=%" (.. (native-var (.. (word 1 chp) ".inherit")) " =" chp))))
 
@@ -109,14 +84,6 @@
       (if (defined? (.. C1 "." p))
           chp
           (_walk p (_chp+ chp)))))
-
-
-(define (_hasProperty p id)
-  &native
-  &public
-  (if (or (defined? (.. id "." p))
-          (_walk p (filter-out " |%" (subst "(" " |" id))))
-      1))
 
 
 ;; Construct an E1 (undefined property) error message.
@@ -289,50 +256,6 @@
 (define (_namedArg1 key)
   &native
   (word 1 (_namedArgs key)))
-
-;;--------------------------------
-;; describeDefn
-;;--------------------------------
-
-;; TODO: now chp+ does!
-;; Like `_chp+`, but also handles initial "C(A)" -> "C" inheritance step.
-;;
-(define `(pup0 id-or-chp)
-  (or (_idC id-or-chp)
-      (_chp+ id-or-chp)))
-
-
-;; TODO: move to help?  (test elsewhere?)
-(define (_describeProp chp prop)
-  &native
-  &public
-  (define `(recur)
-    (_describeProp (pup0 chp) prop))
-
-  (define `C1.P
-    (.. (word 1 chp) "." prop))
-
-  (define `has-inherit
-    (and (recursive? C1.P)
-         (findstring "{inherit}" (native-value C1.P))))
-
-  (if chp
-      (if (undefined? C1.P)
-          (recur)
-          (.. (_describeVar C1.P "   ")
-              (if has-inherit
-                  (.. "\n\n...wherein {inherit} references:\n\n" (recur)))))))
-
-
-;; Return inheritance chain (a list of all the classes that will be
-;; searched, in order) for CHP (zero or more classes).
-;;
-(define (_chain chp ?seen)
-  &native
-  &public
-  (if chp
-      (_chain (_chp+ chp) (._. seen (word 1 chp)))
-      (strip seen)))
 
 
 ;;--------------------------------

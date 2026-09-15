@@ -1,4 +1,7 @@
-# rule-test.mk : Test rule caching & execution
+#------------------------------------------------------------------------
+# Test Minion rule caching & execution
+#------------------------------------------------------------------------
+
 thisFile := $(lastword $(MAKEFILE_LIST))
 include $(dir $(thisFile))test-utils.mk
 
