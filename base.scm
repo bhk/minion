@@ -173,6 +173,22 @@
   (isAlias name))
 
 
+;; Return `.PROP` if GOAL ends in `).PROP` and PROP does not contain `)`.
+;; Nil otherwise.
+;;
+(define `(isProperty goal)
+  &public
+  (if (findstring ")." goal)
+      (filter-out ". %)" (subst ")" ") " goal))))
+
+(expect ".c" (isProperty "C(a).c"))
+(expect ".c" (isProperty "C(B(foo).b).c"))
+(expect nil (isProperty "C(a)."))
+(expect nil (isProperty "C(a)"))
+(expect nil (isProperty "C(A.prop)"))
+(expect nil (isProperty "C(C(foo).prop)"))
+
+
 ;; If goal NAME is a Minion goal (alias, instance, or indirection), then
 ;; return an instance that generates a Make rule for it.  The rule must
 ;; match NAME and ensure that the appropriate Minion goal is built.
@@ -186,6 +202,7 @@
 ;;
 ;;    "help"     -->  "Alias(help)"
 ;;    "CC(a.c)"  -->  "_BuildGoal(CC(a.c))"
+;;    "C(a).p"   -->  "_HelpGoal(C(a).p)"
 ;;    "@X"       -->  "_BuildGoal(@X)"
 ;;    "foo"      -->  ""           (presumably a matching Make rule exists)
 ;;
@@ -194,7 +211,9 @@
   (if (or (_isInstance name)
           (_isIndirect name))
       (.. "_BuildGoal(" name ")")
-      (_isAlias name)))
+      (if (isProperty name)
+          (.. "_HelpGoal(" name ")")
+          (_isAlias name))))
 
 
 (define alias1 &native "x")
@@ -202,6 +221,8 @@
 (expect "Alias(alias1)" (_buildGoalID "alias1"))
 (expect "_BuildGoal(@alias1)" (_buildGoalID "@alias1"))
 (expect "_BuildGoal(a(b))" (_buildGoalID "a(b)"))
+(native-eval "TestClass(arg).prop = 1") ;; not to be confused with an alias
+(expect "_HelpGoal(TestClass(arg).prop)" (_buildGoalID "TestClass(arg).prop"))
 
 
 ;; Assign a simple variable named NAME to VALUE; return VALUE.

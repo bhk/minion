@@ -21,14 +21,6 @@
   *err*)
 
 
-;; Return `.PROP` if GOAL ends in `).PROP` and PROP does not contain `)`.
-;; Nil otherwise.
-;;
-(define `(isProp goal)
-  (if (findstring ")." goal)
-      (filter-out ". %)" (subst ")" ") " goal))))
-
-
 ;; Return the class portion of instance ID.  Return nil if ID has no "(", no
 ;; ")", or begins with "(".
 ;;
@@ -150,7 +142,7 @@
 
 (define (_helpOnProperty goal)
   &native
-  (foreach (p (patsubst ".%" "%" (isProp goal)))
+  (foreach (p (patsubst ".%" "%" (isProperty goal)))
     (foreach (id (patsubst (.. "%." p) "%" goal))
       (_info (propertyInfo p id))  ;; output before trying evaluation
       (propertyValue p id))))
@@ -170,7 +162,7 @@
 
 (define (_helpType goal)
   &native
-  (if (isProp goal)
+  (if (isProperty goal)
       "Property"
       (if (_isInstance goal)
           (if (isClassInvalid goal)

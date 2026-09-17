@@ -519,7 +519,7 @@ _argHash2 = $(subst `,,$(foreach w,$(subst $(if ,,`,), ,$(call _argGroup,$(subst
 _argText = $(patsubst $(_class)(%),%,$(_self))
 _args = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))))
 _badAuto = $(call _error,minion: Unsafe expansion$(\n)$$$$$1 was evaluated prior to rule processing$(\n)during evaluation of $(if $(filter &%,$2),$(word 1,$(patsubst &%,%,$2)),$$(call $2,...))$(if $(_self), in context of $(_self)))
-_buildGoalID = $(if $(or $(_isInstance),$(_isIndirect)),_BuildGoal($1),$(_isAlias))
+_buildGoalID = $(if $(or $(_isInstance),$(_isIndirect)),_BuildGoal($1),$(if $(if $(findstring $].,$1),$(filter-out . %$],$(subst $],$] ,$1))),_HelpGoal($1),$(_isAlias)))
 _chain = $(if $1,$(call _chain,$(_chp+),$2 $(word 1,$1)),$(filter %,$2))
 _checkValue = $(\n)ifneq "$(call _qesc,$2)" "$3"$(\n)  $$(info minion: $$$3 has changed!)$(\n)  $1: $$(_forceTarget)$(\n)endif$(\n)
 _chp+ = $(if $(findstring $[,$1),$(filter-out |%,$(subst $[, |,$1)),$(filter-out =%,$($(word 1,$1).inherit) =$1))

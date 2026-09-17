@@ -4,13 +4,6 @@
 (require "help.scm" &private)
 
 
-(expect ".c" (isProp "C(a).c"))
-(expect ".c" (isProp "C(B(foo).b).c"))
-(expect nil (isProp "C(a)."))
-(expect nil (isProp "C(a)"))
-(expect nil (isProp "C(A.prop)"))
-(expect nil (isProp "C(C(foo).prop)"))
-
 ;; idc
 
 (expect "Cls" (idc "Cls(arg)"))
