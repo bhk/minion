@@ -1,0 +1,2 @@
+minion.mk linguist-generated
+*.scm linguist-language=Scheme

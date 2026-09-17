@@ -15,16 +15,16 @@ How is Minion different from other build tools?
   elegant and concise customization.
 
 * Lightweight dependencies: Minion does not pollute your project.  There is
-  no "installation" step, other than copying a single file, `minion.mk` into
+  no installation step, other than copying a single file, `minion.mk` into
   your project.  The only external dependencies are ubiquitous: GNU Make
   3.81+ and BASH or a compatible shell.
 
 * Speed: Incremental nothing-to-do builds take milliseconds, not minutes,
   even on large projects.  Comprehensive dependency checking means that
   `make clean` is almost never needed.  Minion can greatly outperform
-  "vanilla" Make files by disabling Make's implicit rules and obviating
-  Make's pattern rule processing and many other elaborate features that
-  are redundant with Minion's more powerful constructs.
+  "vanilla" Make files by disabling Make's implicit rules and pattern rule
+  processing -- expensive features that are redundant with Minion's more
+  powerful constructs.
 
 If you are intrigued, this [walk-through](demo.md) provides a gentle introduction.
 
