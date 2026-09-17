@@ -409,7 +409,7 @@ endef
 _safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
 
 define _helpMessage
-Minion v1.1b7 usage:
+Minion v1.1 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
