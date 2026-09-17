@@ -1,6 +1,7 @@
 (require "core")
 (require "base.scm")
 (require "objects.scm")
+(require "tools.scm")
 (require "help.scm" &private)
 
 

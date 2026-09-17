@@ -372,7 +372,7 @@
 ;; _graphDeps, _graph, _traverse
 ;;----------------------------------------------------------------
 
-(declare (_graph fn-ch fn-names cxt nodes ?slots ?out) &native)
+(declare (_graph fn-ch fn-names cxt nodes ?slots ?out) &native &public)
 
 (begin
   ;; This delimiter must not appear anywhere in node names
@@ -435,6 +435,7 @@
   ;;
   (define (_graph ch-fn name-fn cxt nodes ?slots ?out)
     &native
+    &public
     (define `node (word 1 nodes))
     (define `children (native-call ch-fn cxt node))
     (define `name (native-call name-fn cxt node))
@@ -484,6 +485,7 @@
 
 (define (_graphDeps cf name-fn cxt nodes)
   &native
+  &public
   (_graph cf name-fn cxt (_traverse cf cxt nodes)))
 
 

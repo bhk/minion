@@ -565,17 +565,70 @@ downstream of cached instances.
 
 ## Debugging
 
-The variable `minionDebug` can be used to turn on debug messages.  Each
-debug message has a value and an associated name, and the value of
-`minionDebug` is a pattern to be matched with the name using `filter` (so
-`minionDebug=%` will turn on all debug messages).  Notably,
-`minionDebug=EVAL%` will enable messages for all text that Minion feeds to
-Make's `$(eval ...)` function.
+### Command-line Make Expressions
 
-The `_?` function makes it very easy to instrument your Make functions or
-property definitions with debugging output.  Replacing `$(call
-func,...args...)` with `$(call _?,func,...args...)` will retain the behavior
-but write inputs and outputs to stdout.
+You can pass arbitrary Make expressions on the command line as a goal and
+Minion will evaluate it and display it.  The expressions have to begin with
+`$(`.  For example:
+
+    $ make '$(patsubst %,<%>,a b c)'
+
+will output:
+
+    $(patsubst %,<%>,a b c) = '<a> <b> <c>'
+
+### Tracing
+
+Minion can instrument GNU Make functions to trace their invocation during
+evaluation of your makefile.  Functions that can be traced include those
+defined in your makefiles and those defined by Minion, but Make intrinsic
+functions, like `filter`, etc., cannot be traced.  When an instrumented
+function is called, its name and arguments are written to stdout, and when
+it returns its return value is written.  Indentation is used to indicate the
+nesting level.
+
+There are a few ways to activate tracing:
+
+1. If the variable `minionTrace` is set on the command line or in the
+   environment, it is treated as list of functions to be instrumented.  This
+   occurs after all of Minion's functions have been defined but before rule
+   evaluation is performed.
+
+2. `$(call _trace,NAMES)` will instrument the functions listed in NAMES.
+   Remember that since this function is defined in `minion.mk` it must be
+   called after including `minion.mk` is included.
+
+3. The function `_?` can be used to instrument an individual call site.
+   Replace any `$(call f,a1,a2,...)` with `$(call _?,f,a1,a2,...)` and that
+   individual call will be traced in the same manner as `_trace`.
+
+Here is an example makefile:
+
+    rev = $(if $1,$(call rev,$(wordlist 2,99999999,$1)) $(word 1,$1))
+    include minion.mk
+
+Invoking `make '$(call rev,1 2 3 4)'` with this makefile will output:
+
+    $(call rev,1 2 3 4) = ' 4 3 2 1'
+
+`make '$(call rev,1 2 3,4)' minionTrace=rev` will output:
+
+    _trace: tracing reverse ...
+    (rev '1 2 3 4') ->
+      (rev '2 3 4') ->
+        (rev '3 4') ->
+          (rev '4') ->
+            (rev) ->
+            (rev) <- ''
+          (rev) <- ' 4'
+        (rev) <- ' 4 3'
+      (rev) <- ' 4 3 2'
+    (rev) <- ' 4 3 2 1'
+    $(call rev,1 2 3 4) = ' 4 3 2 1'
+
+One notable use case is `minionTrace=_eval`, which will display what Minion
+is passing to `_eval`.  `_eval` simply calls `$(eval ...)`, but Minion uses
+it to allow tracing to monitor the rules it is feeding to Make.
 
 
 ## Built-in Targets
@@ -617,13 +670,18 @@ When other goals are listed after `help`, this bypasses `Alias(help)` and
 activates "help mode", in which Minion will describe the other goals
 *instead of* building them.
 
-An additional feature of help mode is that it can accept instance property
-syntax on the command line.  For example:
+`make help CLASS` will show a description of a Minion class.  (If
+`CLASS.inherit` is defined in your makefile, `CLASS` is considered a valid
+class.)
 
-   make help 'CC(foo.c).command'
+Help mode can accept instance property syntax on the command line.  In fact,
+it will intercept these goals even when `help` is not on the command line.
+For example:
 
-will show the value of `out` for `CC(foo.c)`, and also describe the property
-definitions that were involved, and the inheritance chain for `CC`.
+   make 'CC(foo.c).command'
+
+will show the value of `out` for `CC(foo.c)` and describe how it was
+computed.
 
 
 ### `make graph`
@@ -654,22 +712,14 @@ We generally avoid single-letter global variables, reserving them for use as
 "local" variables (in Make `foreach` expressions).
 
 
-### Supported Functions
+### Supported Functions and Variables
 
-Minion defines a number of variables and functions for use by user makefiles
-within [recursive](#simple-and-recursive-variables) property definitions.
+Minion defines a number of variables and functions that may be used by user
+makefiles.  Some of these relate directly to Minion functionality, and
+others are potentially useful to Make code in general.
 
-* Character constants
 
-  - `$(\n)`: newline
-  - `$(\t)`: tab
-  - `$(\s)`: space
-  - `$(\e)`: escape
-  - `$(\H)`: `#`
-  - '$(\q)`: `"`
-  - `$;` : `,`
-  - `$[` : `(`
-  - `$]` : `)`
+#### Object System Functions
 
 * `$(call get,PROP,IDS)`
 
@@ -694,18 +744,6 @@ within [recursive](#simple-and-recursive-variables) property definitions.
   definition.  The second argument is used to construct a diagnostic message
   only in the event `PROP` is undefined.  It should be the name of the
   function calling `.`, which is available in Make as `$0`.
-
-* `$(call _shellQuote,STR)`
-
-  Quote `STR` as an argument for /bin/sh or /bin/bash.
-
-* `$(call _printfCmd,STR)`
-
-  Return a shell command that writes `STR` to stdout.
-
-* `$(call _eq,A,B)`
-
-  Return "1" if `A` and `B` are equal, "" otherwise.
 
 * `$(_self)`
 
@@ -742,6 +780,56 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
   Same as `$(word 1,$(call _namedArgs,NAME))`.
 
+
+#### Other Minion Functionality
+
+* `$(call _wildcard,PATTERNS)`
+
+  Return `$(wildcard PATTERNS)`, identifying the result as a dependency of
+  the rule cache.
+
+* `$(call _shell,COMMAND)`
+
+  Return `$(shell COMMAND)`, identifying the result as a dependency of the rule
+  cache.
+
+* `$(call _var,VARNAME)`
+
+  Return `$(VARNAME)`, identifying the result as a dependency of the rule
+  cache.
+
+* `$(call _trace,NAMES)`
+
+  Instrument functions listed in NAMES for run-time tracing.  This function
+  can be called multiple times; it will instrument
+
+
+#### Generic Definitions
+
+* Character constants
+
+  - `$(\n)`: newline
+  - `$(\t)`: tab
+  - `$(\s)`: space
+  - `$(\e)`: escape
+  - `$(\H)`: `#`
+  - '$(\q)`: `"`
+  - `$;` : `,`
+  - `$[` : `(`
+  - `$]` : `)`
+
+* `$(call _eq?,A,B)`
+
+  Return "1" if `A` and `B` are equal, "" otherwise.
+
+* `$(call _shellQuote,STR)`
+
+  Quote `STR` as an argument for /bin/sh or /bin/bash.
+
+* `$(call _printfCmd,STR)`
+
+  Return a shell command that writes `STR` to stdout using /bin/printf.
+
 * `$(call _relpath,FROM,TO)`
 
   Construct a path that can be used to refer to file `TO` from file `FROM`.
@@ -759,22 +847,11 @@ within [recursive](#simple-and-recursive-variables) property definitions.
 
      $(call CF,CC,node) -> children
 
-* `$(call _wildcard,PATTERNS)`
+* `$(call _unique,LIST)`
 
-  Return `$(wildcard PATTERNS)`, identifying this as a dependency, allowing
-  to rebuild rule cache files to be automatically when the wildcard result
-  changes.
-
-* `$(call _shell,COMMAND)`
-
-  Return `$(shell COMMAND)`, identifying this as a dependency, allowing to
-  rebuild rule cache files to be automatically when the `COMMAND` result
-  changes.
-
-* `$(call _var,VARNAME)`
-
-  Return `$(VARNAME)`, identifying this as a dependency, allowing to rebuild
-  rule cache files to be automatically when the variable's value changes.
+   Return all of the unique words in LIST without sorting (the first
+   occurrence of each word is preserved).  When order is unimportant, the
+   Make builtin `$(sort LIST)` is a faster way of eliminating duplicates.
 
 
 ## Syntax
