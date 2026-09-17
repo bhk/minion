@@ -67,9 +67,9 @@ _Alias.in = $($(_argText))
 #
 _Clean.inherit = _IsPhony Builder
 	_Clean.ids = $(filter %$],$(call _expand,$(_args)))
-_Clean.in = $(patsubst %,Clean(%),$(call get,needs,{ids}))
+_Clean.in = $(patsubst %,Clean(%),{{ids}.needs})
 _Clean.command = $(foreach i,{ids},\
-  $(if $(call _hasProperty,cleanCommand,$i),$(call get,cleanCommand,$i),rm -f $(call get,out,$i)))
+  $(if $(call _hasProperty,cleanCommand,$i),{$i.cleanCommand},rm -f {$i.out}))
 
 
 # Variants(TARGETS) : Build {all} variants of TARGETS.  Each variant
@@ -259,7 +259,7 @@ _Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
 _Builder.out = {outDir}{outName}
 
 define _Builder.rule
-{@} : {^} $(call get,out,{upIDs} {depsIDs}) | $(call get,out,{ooIDs})
+{@} : {^} $(call get,out,{upIDs} {depsIDs}) | {{ooIDs}.out}
 $(call _recipe,{recipe})
 $(patsubst %,-include %
 ,{depsMF})$(foreach F,{vvFile},_vv =
@@ -286,7 +286,7 @@ _Builder.depsMF =
 # Shorthands
 _Builder.@ = {out}
 _Builder.< = $(firstword {^})
-_Builder.^ = $(call get,out,{inIDs})
+_Builder.^ = {{inIDs}.out}
 
 # Diagnose someone accidentally using "$@" instead of "{@}".
 @ = $(call _badAuto,@,$0)
@@ -300,7 +300,7 @@ _Builder.inIDs = $(call _inferIDs,{inX},{inferClasses})
 # up: dependencies specified by the class
 _Builder.up =
 _Builder.upIDs = $(call _expand,{up},up)
-_Builder.up^ = $(call get,out,{upIDs})
+_Builder.up^ = {{upIDs}.out}
 
 # oo: order-only dependencies; these may be phony targets, so we allow aliases
 _Builder.oo =
@@ -309,7 +309,7 @@ _Builder.ooIDs = $(call _expand,{oo},oo)
 # deps: direct dependencies not covered by {in} or {up}
 _Builder.deps =
 _Builder.depsIDs = $(call _expand,{deps},deps)
-_Builder.deps^ = $(call get,out,{depsIDs})
+_Builder.deps^ = {{depsIDs}.out}
 
 # inferClasses: a list of CLASS.EXT patterns
 _Builder.inferClasses =
@@ -409,7 +409,7 @@ endef
 _safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
 
 define _helpMessage
-Minion v1.1b6 usage:
+Minion v1.1b7 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
