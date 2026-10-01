@@ -10,6 +10,18 @@
 ;; Tests
 ;;--------------------------------
 
+
+;; isProperty
+
+(expect ".c" (isProperty "C(a).c"))
+(expect ".c" (isProperty "C(B(foo).b).c"))
+(expect nil (isProperty "C(a)."))
+(expect nil (isProperty "C(a)"))
+(expect nil (isProperty "C(A.prop)"))
+(expect nil (isProperty "C(C(foo).prop)"))
+
+;; idClass
+
 (let-global ((_E0 "-"))
   (expect (idClass "f") "_File")
   (expect (idClass "C(a)") "C")
@@ -121,6 +133,9 @@
 ;; _E1 errors
 
 ;; _e1-msg caller/site descriptions
+
+(define (guilty) &native nil)
+
 (let-global ((_self "C(a)")
              (_class "C"))
   ;; site
@@ -138,7 +153,7 @@
   ;; caller is &I.P
   (expect 1 (see "C(a).r =" (e1-msg "p" "C(a).r" nil)))
   ;; caller is OTHER
-  (expect 1 (see "during call to:\n\n   _shell =" (e1-msg "p" "_shell" nil)))
+  (expect 1 (see "during call to:\n\n   guilty =" (e1-msg "p" "guilty" nil)))
   ;; bad class?
   (let-global ((_class "CX"))
     (expect 1 (see "CX.inherit is not defined" (e1-msg "p" "foo" nil)))))

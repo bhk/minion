@@ -28,7 +28,7 @@ TOKs = $(patsubst %,.out/%.ok,$(testMakefiles))
 testMakefiles = $(wildcard *.mak)
 
 
-.PHONY: default minion promote demo promote-demo clean time
+.PHONY: default minion promote demo promote-demo clean time tags
 
 default: $(MOK) ; @$(diff) minion.mk $(MO)
 minion: $(MOK) ; @diff -q minion.mk $(MO) || true
@@ -38,6 +38,8 @@ promote-demo: $(DO) ; mv $(DO) demo.md
 
 clean: ; rm -rf .out .scam demo/.scam
 time: ; time make -f time.mak
+tags: .TAGS
+.TAGS: *.scm */*.scm ; etags *.scm */*.scm -o .TAGS
 
 $(MOK): $(MO) $(TOKs) $(DOK) ; @touch $@
 

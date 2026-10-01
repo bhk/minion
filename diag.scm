@@ -71,6 +71,14 @@
   (.. "TRACE*" var))
 
 
+;; We cannot trace functions that are called by instrumentation because that
+;; would result in infinite recursion.  Also, we cannot trace functions when
+;; they are currently being executed, because of a Make bug (reassigning a
+;; variable during expansion).
+;;
+(define `untraceable
+  "_trace _traceIn _traceOut _tqv _qv _qvn _ti+ _ti- _ti")
+
 ;; Instrument functions named in VARS with tracing, unless they have already
 ;; been instrumented.
 ;;
@@ -82,8 +90,8 @@
     (define `status
       (cond ((undefined? v) (.. "function " v " not defined!"))
             ((defined? tv) (.. "already traced " v))
-            ((filter v "_traceIn _traceOut _tqv _qv _qvn _ti+ _ti- _ti")
-             (.. "CANNOT trace " v)) ;; circular; unending recursion
+            ((filter v untraceable)
+             (.. "CANNOT trace " v))
             (else
              (_fset tv (native-value v))
              (_fset v (.. "$(_traceIn)$(call _traceOut,$0,$(call " tv

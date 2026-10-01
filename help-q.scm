@@ -27,10 +27,10 @@
    M.m: "MIXIN",
    C.inherit: "M B",
    C.prop: "cprop + {inherit}",
-   (or "B(foo).px"): "PX + {inherit}",
-   (or "B(foo).prop"): "FOO + {inherit}",
-   (or "C(foo).ix"): "IX",
-   (or "C(foo).prop"): "PROP + {inherit}" })
+   "B(foo).px": "PX + {inherit}",
+   "B(foo).prop": "FOO + {inherit}",
+   "C(foo).ix": "IX",
+   "C(foo).prop": "PROP + {inherit}" })
 
 
 ;; _describeProp

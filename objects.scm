@@ -14,9 +14,53 @@
 (require "base.scm")
 (require "compile.scm")
 
+;; If ID is an instance, return it unmodified.
+;;
+;; This function does not perform a deep validation of the instance syntax,
+;; but it discriminates them from valid indirections, aliases, or file names.
+;;
+(define `(isInstance id)
+  &public
+  (filter "%)" id))
 
-(define `(func-defined? name)
-  (filter "r%" (native-flavor name)))
+(define (_isInstance id)
+  &public
+  &native
+  (isInstance id))
+
+
+;; If ID is an indirection (@GROUP, CLASS@GROUP, C1@C2@GROUP, ...) return
+;; it unmodified.
+;;
+(define (_isIndirect id)
+  &public
+  &native
+  (if (findstring "@" id)
+      (filter-out "%)" id)))
+
+
+;; Return the alias instance if NAME is a variable name.
+;;
+(define `(isAlias id)
+  &public
+  ;; Only allow makefile-defined variables to minimize potential for
+  ;; confusion with environment and make defaults (e.g. LINT.c !)
+  (if (filter "f% o%" (native-origin id))
+      (.. "Alias(" id ")")))
+
+(define (_isAlias name)
+  &native
+  &public
+  (isAlias name))
+
+
+;; Return `.PROP` if GOAL ends in `).PROP` and PROP does not contain `)`.
+;; Nil otherwise.
+;;
+(define `(isProperty goal)
+  &public
+  (if (findstring ")." goal)
+      (filter-out ". %)" (subst ")" ") " goal))))
 
 
 ;; Report error: mal-formed instance name

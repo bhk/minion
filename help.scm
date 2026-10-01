@@ -2,6 +2,7 @@
 (require "base.scm")
 (require "objects.scm")
 (require "tools.scm")
+(require "rules.scm")
 
 (declare *err* &native)
 

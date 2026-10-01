@@ -2,6 +2,26 @@
 (require "base.scm")
 (require "tools.scm" &private)
 
+;; _wildcard
+
+(expect "base-q.scm" (_wildcard "ba*-q.scm"))
+(expect "base.scm" (_wildcard "b*e.scm"))
+(expect (sort "ba*-q.scm b*e.scm") globLog)
+
+;; _shell
+
+(expect "base-q.scm" (_shell "echo ba*-q.scm"))
+(expect "base.scm" (_shell "echo b*e.scm"))
+(expect "echo ba*-q.scm" (promote (word 2 shellLog)))
+
+;; _var
+
+(define VFOO &native 1)
+(define VBAR &native 2)
+(expect "1" (_var "VFOO"))
+(expect "2" (_var "VBAR"))
+(expect "VBAR VFOO" varLog)
+
 ;; _escape
 
 (expect "a$]$$x$;$;" (_escape "a)$x,,"))
@@ -31,23 +51,6 @@
 (expect "\ta$$b\n\tc\n" (_recipe "a$b\n\nc"))
 (expect "\ta$b\n" (_recipe (_lazy "a$b")))
 
-;; _expand
-
-(set-native-fn "ev0" "")
-(set-native-fn "ev1" "a1 b1")
-(set-native-fn "ev2" "a2 @ev1 c@ev1 c(@v) D@C@ev1 E@ev0")
-(expect (_expand "E@ev0") "")
-(expect (_expand "a @ev2")
-        "a a2 a1 b1 c(a1) c(b1) c(@v) D(C(a1)) D(C(b1))")
-
-(expectInError (_expand "a@undef" "x") "undefined variable 'undef'")
-
-(let-global ((_self "C(A)"))
-  (expectInError (_expand "a@" "x")
-                 (.. "Invalid target: 'a@'\n"
-                     "Name ends in '@'\n"
-                     "Found while expanding C(A).x")))
-
 ;; _inferIDs
 
 (set-native "IC(a.c).out" "out/a.o")
@@ -61,33 +64,6 @@
 (expect (_inferIDs "y a.x a.o IC(a.c)" "IP.o")
         "y a.x IP(a.o) IP(IC(a.c))")
 
-;; _rollupOne, _rollup, _rollupEx
-
-(set-native "R(a).needs" "R(b) R(c) x y z")
-(set-native "R(b).needs" "R(c) R(d) x y z")
-(set-native "R(c).needs" "R(d)")
-(set-native "R(d).needs" "R(e)")
-(set-native "R(e).needs" "")
-
-(expect (_rollupOne "R(a)")
-        "R(b) R(c) R(d) R(e)")
-
-(expect (_rollup "R(a)")
-        "R(a) R(b) R(c) R(d) R(e)")
-
-(expect (strip (_rollupEx "R(a)" ""))
-        "R(a) R(b) R(c) R(d) R(e)")
-
-(expect (strip (_rollupEx "R(a)" "R(d)"))
-        "R(a) R(b) R(c)")
-
-(set-native (rulecache-needs-var "R(d)") "R(x)")
-(set-native "R(x).needs" "")
-
-(expect (strip (_rollupEx "R(a)" "R(d)"))
-        "R(a) R(b) R(c) R(x)")
-
-
 ;; _relpath
 
 
@@ -97,24 +73,6 @@
 (expect (_relpath "x/b" "x/y") "y")
 (expect (_relpath "a/b/c"
                   "a/x/y") "../x/y")
-
-;; _group
-
-(expect (_group "a | c d e f g h" 3)
-        "a|0|1|0c d|0e|0f g|0h|0")
-
-(define `(group-test list n out)
-  (expect (foreach (g (_group list n))
-            (.. "<" (foreach (i (_ungroup g)) i) ">"))
-          out))
-
-(group-test "a b c"    1 "<a> <b> <c>")
-(group-test ""         2 "")
-(group-test "a"        2 "<a>")
-(group-test "a b"      2 "<a b>")
-(group-test "a b c"    2 "<a b> <c>")
-(group-test "a b c d e f g h"  3 "<a b c> <d e f> <g h>")
-
 
 ;; _graph
 
@@ -160,3 +118,13 @@
 
 (expect (_unique "a b a c a b c c") "a b c")
 (expect (_unique "a b % ^ a b % ^") "a b % ^")
+
+;; _buildGoalID
+
+(define alias1 &native "x")
+
+(expect "Alias(alias1)" (_buildGoalID "alias1"))
+(expect "_BuildGoal(@alias1)" (_buildGoalID "@alias1"))
+(expect "_BuildGoal(a(b))" (_buildGoalID "a(b)"))
+(native-eval "TestClass(arg).prop = 1") ;; not to be confused with an alias
+(expect "_HelpGoal(TestClass(arg).prop)" (_buildGoalID "TestClass(arg).prop"))

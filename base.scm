@@ -92,6 +92,12 @@
   ;; "recursive" or "simple" (not "undefined")
   (findstring "s" (native-flavor var)))
 
+
+(define `(func-defined? name)
+  &public
+  (filter "r%" (native-flavor name)))
+
+
 ;; Return non-nil if VAR has not been assigned a value.
 ;;
 (define `(undefined? var)
@@ -127,104 +133,6 @@
   (_qvn value "'"))
 
 
-;; test _qv, _qvn
-(expect "a b" (_qvn "a b"))
-(expect "\n  | a\n  | b" (_qvn "a\nb"))
-(expect "'a b'" (_qv "a b"))
-
-
-;; If ID is an instance, return it unmodified.
-;;
-;; This function does not perform a deep validation of the instance syntax,
-;; but it discriminates them from valid indirections, aliases, or file names.
-;;
-(define `(isInstance id)
-  &public
-  (filter "%)" id))
-
-(define (_isInstance id)
-  &public
-  &native
-  (isInstance id))
-
-
-;; If ID is an indirection (@GROUP, CLASS@GROUP, C1@C2@GROUP, ...) return
-;; it unmodified.
-;;
-(define (_isIndirect id)
-  &public
-  &native
-  (if (findstring "@" id)
-      (filter-out "%)" id)))
-
-
-;; Return the alias instance if NAME is a variable name.
-;;
-(define `(isAlias id)
-  &public
-  ;; Only allow makefile-defined variables to minimize potential for
-  ;; confusion with environment and make defaults (e.g. LINT.c !)
-  (if (filter "f% o%" (native-origin id))
-      (.. "Alias(" id ")")))
-
-(define (_isAlias name)
-  &native
-  &public
-  (isAlias name))
-
-
-;; Return `.PROP` if GOAL ends in `).PROP` and PROP does not contain `)`.
-;; Nil otherwise.
-;;
-(define `(isProperty goal)
-  &public
-  (if (findstring ")." goal)
-      (filter-out ". %)" (subst ")" ") " goal))))
-
-(expect ".c" (isProperty "C(a).c"))
-(expect ".c" (isProperty "C(B(foo).b).c"))
-(expect nil (isProperty "C(a)."))
-(expect nil (isProperty "C(a)"))
-(expect nil (isProperty "C(A.prop)"))
-(expect nil (isProperty "C(C(foo).prop)"))
-
-
-;; If goal NAME is a Minion goal (alias, instance, or indirection), then
-;; return an instance that generates a Make rule for it.  The rule must
-;; match NAME and ensure that the appropriate Minion goal is built.
-;;
-;; Otherwise, return empty.
-;;
-;; This is used by Minion to construct the root set of Minion instances from
-;; Make command-line goals.
-;;
-;; Examples:
-;;
-;;    "help"     -->  "Alias(help)"
-;;    "CC(a.c)"  -->  "_BuildGoal(CC(a.c))"
-;;    "C(a).p"   -->  "_HelpGoal(C(a).p)"
-;;    "@X"       -->  "_BuildGoal(@X)"
-;;    "foo"      -->  ""           (presumably a matching Make rule exists)
-;;
-(define (_buildGoalID name)
-  &native
-  (if (or (_isInstance name)
-          (_isIndirect name))
-      (.. "_BuildGoal(" name ")")
-      (if (isProperty name)
-          (.. "_HelpGoal(" name ")")
-          (_isAlias name))))
-
-
-(define alias1 &native "x")
-
-(expect "Alias(alias1)" (_buildGoalID "alias1"))
-(expect "_BuildGoal(@alias1)" (_buildGoalID "@alias1"))
-(expect "_BuildGoal(a(b))" (_buildGoalID "a(b)"))
-(native-eval "TestClass(arg).prop = 1") ;; not to be confused with an alias
-(expect "_HelpGoal(TestClass(arg).prop)" (_buildGoalID "TestClass(arg).prop"))
-
-
 ;; Assign a simple variable named NAME to VALUE; return VALUE.
 ;;
 ;; When NAME contains `)` or `:`-before-`=` it will cause problems later
@@ -240,38 +148,6 @@
   value)
 
 
-(begin
-  (define `(test key value)
-    (_set key value)
-    (expect (native-value key) value))
-  (test "test_x \ty(" 1)
-  (test "test_set" "a\\b#c\\#\\\\$v\nz")
-  (test "test$:a=b(" "a\\b#c\\#\\\\$v\nz"))
-
-
-;;--------------------------------
-;; External dependency wrappers: _wildcard, _shell, _var
-;;--------------------------------
-
-(define globLog &public "")
-(define shellLog &public "")
-(define varLog &public "")
-
-;; Same as $(wildcard ...), but keeps a log of patterns matched.
-;;
-(define (_wildcard globs)
-  &public
-  &native
-  (_set (native-name globLog) (sort (._. globLog globs)))
-  (wildcard globs))
-
-(begin
-  ;; test _wildcard
-  (expect "base.scm" (_wildcard "ba*.scm"))
-  (expect "base.scm" (_wildcard "b*e.scm"))
-  (expect (sort "ba*.scm b*e.scm") globLog))
-
-
 ;; Encode \s and \t as non-space in reversible way
 (define `(demote str)
   &public
@@ -282,36 +158,6 @@
 (define `(promote str)
   &public
   (subst "!0" " " "!+" "\t" "!1" "!" str))
-
-
-;; Same as $(shell ...), but logs commands issues.
-;;
-(define (_shell command)
-  &public
-  &native
-  (_set (native-name shellLog) (sort (._. shellLog (demote command))))
-  (shell command))
-
-(begin
-  ;; test _shell
-  (expect "base.scm" (_shell "echo ba*.scm"))
-  (expect "base.scm" (_shell "echo b*.scm"))
-  (expect "echo ba*.scm" (promote (word 2 shellLog))))
-
-
-(define (_var name)
-  &public
-  &native
-  (_set (native-name varLog) (sort (._. varLog name)))
-  (native-var name))
-
-(begin
-  ;; test _shell
-  (define VFOO &native 1)
-  (define VBAR &native 2)
-  (expect "1" (_var "VFOO"))
-  (expect "2" (_var "VBAR"))
-  (expect "VBAR VFOO" varLog))
 
 
 ;; Assign a recursive variable NAME, and return NAME.
@@ -338,25 +184,6 @@
                           "#" "$(\\H)"
                           value)))
   name)
-
-(begin
-  (define `(test name value-in ?value-out-if-different)
-    (define `value-out (or value-out-if-different value-in))
-    (_fset name value-in)
-    (expect value-out (native-call name)))
-
-  ;; (test "test_f:x=y" "x")   ;; expected to fail
-  ;; (test "test_f(a)" "abc")  ;; expected to fail
-  (test "test_f x=y" "fxy")
-
-  (test "test_f" "x")
-  (expect (native-value "test_f") "x")  ;; no prefix
-  (test "test_f" "")
-  (expect (native-value "test_f") "")   ;; no prefix
-  (test "test_f" "$(or 1)" "1")
-  (test "test_f" "   abc  \n\ndef\n")
-  (test "test_f" "echo '#-> x'")
-  (test "test_f" "a\\b\\\\c\\#\\"))
 
 
 ;;----------------------------------------------------------------
@@ -441,22 +268,6 @@
       (.. ":" (subst "," " :" arg))))
 
 
-(expect (_argHash "a:b:c,d:e,f,g") "a:b:c d:e :f :g")
-(expect (_argHash "a") ":a")
-(expect (_argHash "a,b,c") ":a :b :c")
-(expect (_argHash "C(a)") ":C(a)")
-(expect (_argHash "C(a:b)") ":C(a:b)")
-(expect (_argHash "x:C(a)") "x:C(a)")
-(expect (_argHash "c(a,b:1!R()),d,x:y") ":c(a,b:1!R()) :d x:y")
-(expect (_argHash "c(a,b:1()),d,x:y")   ":c(a,b:1()) :d x:y")
-
-(let-global ((_argError (lambda (arg) (subst "`(" "<(>" "`)" "<)>" arg))))
-  (expect (_argHash "c(a,b:1()),d,x:y)(") ":c(a,b:1()) :d x:y<)><(>"))
-
-(expect (_argHash ",") ": :")
-(expect (_argHash ",a,b,") ": :a :b :")
-
-
 ;; Get matching values from a hash
 ;;
 (define (_hashGet hash ?key)
@@ -464,10 +275,6 @@
   &native
   (define `pat (.. key ":%"))
   (patsubst pat "%" (filter pat hash)))
-
-
-(expect (_hashGet ":a :b x:y" "") "a b")
-(expect (_hashGet ":a :b x:y" "x") "y")
 
 
 ;; Describe the definition of variable NAME; prefix all lines with PREFIX
@@ -482,18 +289,6 @@
                      (.. "define " name "\n" (native-value name) "\nendef"))
               (.. name " = " (native-value name)))
           (.. name " := " (subst "$" "$$" "\n" "$(\\n)" (native-value name))))))
-
-(begin
-  (set-native "sv-s" "a\nb$")
-  (set-native-fn "sv-r1" "a b")
-  (set-native-fn "sv-r2" "a\nb")
-
-  (expect (_describeVar "sv-s" "P: ")  "P: sv-s := a$(\\n)b$$")
-  (expect (_describeVar "sv-r1" "P: ")  "P: sv-r1 = a b")
-  (expect (_describeVar "sv-r2" "P: ")  (.. "P: define sv-r2\n"
-                                            "P: a\n"
-                                            "P: b\n"
-                                            "P: endef")))
 
 
 ;;--------------------------------

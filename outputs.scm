@@ -1,5 +1,6 @@
 (require "core")
 (require "base.scm")
+(require "objects.scm")
 
 ;;----------------------------------------------------------------
 ;; Output file defaults
