@@ -869,10 +869,10 @@ The following BNF describes target names:
 
 These definitions rely on the following character classes:
 
-    ClassChar:  A-Z a-z 0-9 _ - + / ^ ~ { }
-    NameChar:   A-Z a-z 0-9 _ - + / ^ ~ { } .
-    PropChar:   A-Z a-z 0-9 _ - + / ^ ~       @ < >
-    ValueChar:  A-Z a-z 0-9 _ - + / ^ ~ { } . @ < > ! *
+    ClassChar:  A-Z a-z 0-9 _ - +
+    NameChar:   A-Z a-z 0-9 _ - + . @ , /
+    PropChar:   A-Z a-z 0-9 _ - +   @ , / ^ ~ < >
+    ValueChar:  A-Z a-z 0-9 _ - + . @ , /   ~     *
 
 
 Note that an argument list contains zero or more arguments, and each

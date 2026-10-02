@@ -33,12 +33,35 @@ else
 endif
 
 
-default: ;@true
+default: collision ;@true
 
 
 #------------------------------------------------------------------------
 # Tests & interactive targets
 #------------------------------------------------------------------------
+
+#
+# Colliding rules
+#
+
+TARGET1 = target1
+TARGET2 = target2
+
+.PHONY: $(TARGET1) $(TARGET2)
+$(TARGET1): ; @true
+$(TARGET2): ; @true
+
+expectCollide = @$(makeThis) $1 TARGET1='$1' TARGET2='$2' 2>&1 >/dev/null | grep -q 'warning: ignoring old' || (echo '** Expected collision: $1 & $2'; false)
+expectNoCollide = @$(makeThis) $1 TARGET1='$1' TARGET2='$2' || (echo 'Expected no collision: $1 & $2'; false)
+
+collision:
+	$(call expectCollide, a/b, ./a/b)
+	$(call expectCollide, a/b, ././a/b)
+	$(call expectNoCollide, a/b, a/../a/b)
+	$(call expectNoCollide, a/b, a/./b)
+	$(call expectNoCollide, a/b, a//b)
+	$(call expectNoCollide, a/b, A/B)
+
 
 #
 # double-expansion of expressions (currently used in `.`)
