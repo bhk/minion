@@ -6,9 +6,10 @@ deploy = Copy@CExe@sources
 CC.langFlags = {inherit} -Wextra
 
 CCg.inherit = CC
-CCg.objFlags = -g
+CCg.objFlags = -g {inherit}
 
 Sizes.inherit = Run
 Sizes.command = wc -c {^}
 
+Builder.outDir = {outDirTree}
 include ../minion.mk

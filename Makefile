@@ -25,7 +25,7 @@ DO = .out/demo.md
 MOK = $(MO).ok
 DOK = $(DO).ok
 TOKs = $(patsubst %,.out/%.ok,$(testMakefiles))
-testMakefiles = $(wildcard *.mak)
+testMakefiles = probe.mak fn-test.mak rule-test.mak
 
 
 .PHONY: default minion promote demo promote-demo clean time tags
@@ -36,7 +36,7 @@ promote: $(MOK) ; mv $(MO) minion.mk
 demo: $(DOK)
 promote-demo: $(DO) ; mv $(DO) demo.md
 
-clean: ; rm -rf .out .scam demo/.scam
+clean: ; rm -rf .out .scam demo/.scam .TAGS
 time: ; time make -f time.mak
 tags: .TAGS
 .TAGS: *.scm */*.scm ; etags *.scm */*.scm -o .TAGS
@@ -55,7 +55,7 @@ $(DO): $(TOKs) demo/*
 	cp demo/* .out/demo/
 	cd .out/demo && MAKEFLAGS= $(SCAM) run-session.scm demo-session.md -- -o ../../$@
 
-# $(TOKs): Run makefile tests
+# $(TOKs): Run test makefiles
 .out/%.mak.ok: %.mak $(MO) test-utils.mk
 	@echo '#*> $@ ...'
 	@mkdir -p $(@D)

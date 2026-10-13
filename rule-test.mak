@@ -1,11 +1,12 @@
 #------------------------------------------------------------------------
 # Test Minion rule caching & execution
+# Set NOISY=1 to see all commands issued.
 #------------------------------------------------------------------------
 
 thisFile := $(lastword $(MAKEFILE_LIST))
 include $(dir $(thisFile))test-utils.mk
 
-default = Test(cache) Test(graph) Test(clean)
+default = Test(cache) Test(graph) Test(clean) Test(collide)
 
 # Invoke this makefile directly to test ./minion.mk
 MINION ?= minion.mk
@@ -18,7 +19,7 @@ Builder.recipe = $(if {noisy},$(subst $(\n)@,$(\n),$(subst $(\n) ,$(\n),$(subst 
 Builder.noisy = $(NOISY)
 
 Test.in =
-Test.log = {outDir}rtlog
+Test.log = $(OUTDIR)$(_arg1).log
 
 #----------------------------------------------------------------
 # Test(cache)
@@ -35,6 +36,7 @@ Test(cache).make = minionCache=echoxxx minionNoCache='Echo(xx)' OUTDIR={subOUTDI
 Echo.inherit = Builder
 Echo.rule = .PHONY: {@}$(\n){inherit}
 Echo.in = $(patsubst %,Echo(%),$(patsubst x%,%,$(filter x%,$(_arg1))))
+Echo.out = $(VOUTDIR)/Echo/$(_arg1)
 # TEXT is an un-tracked external variable that influences the rule
 Echo.command = @echo echo=$(or $(TEXT),$(_argText))= > {@} {track}
 # Reference tracked external dependencies...
@@ -90,8 +92,10 @@ Test(clean).make = OUTDIR={subOUTDIR} {inherit} IN_CLEAN_TEST=1
 define Test(clean).exec
   @# ASSERT: `Clean(TARGET)` cleans target and its descendants (not VOUTDIR)
   @# ASSERT: `Clean(TARGET)` cleans {vvFile} along with {out} (via .cleanCommand)
-  @mkdir -p {subOUTDIR}
   @{make} 'Echo(xxx)' > {log}
+  @[[ -f {subOUTDIR}Echo/xx ]] $(call _!!,Did not build .out)
+  @[[ -f {subOUTDIR}Echo/xx.vv ]] $(call _!!,Did not build .vvFile)
+  @[[ -f {subOUTDIR}Echo/x ]] $(call _!!,Did not build dependency)
   @( cd {subOUTDIR}Echo/ && echo *) | grep -q 'x x.vv xx xx.vv xxx xxx.vv'
   @{make} 'Clean(Echo(xx))' >> {log}
   @! [[ -f {subOUTDIR}Echo/xx ]] $(call _!!, Did not clean .out)
@@ -121,38 +125,21 @@ endif
 
 
 #----------------------------------------------------------------
-# time-rollup, time-eval, time-cache
+# Test(collide): Test collision detection
 #----------------------------------------------------------------
 
-time = time-rollup time-eval time-cache
-time-rollup = Time(Call(_rollup,Alias(mongo)))
-time-eval = Time(Call(_evalRules,Alias(mongo)))
-time-cache = TimeCache(1) TimeCache(100)
+Simple.inherit = Builder
+Simple.out = $(_arg1)
 
-Call.inherit = Phony
-Call.expr = $$(call $(_argText))
-Call.command = @echo '{expr}' $(if $(call or,{expr}),)
+colliding = Simple(A) Simple(./A)
 
-Time.inherit = Phony
-Time.command = /bin/sh -c "time {make} $(foreach a,$(_args),$(call _shellQuote,$a))"
-
-TimeCache.inherit = Phony
-define TimeCache.command
-  @rm -rf $(OUTDIR)cache.mk
-  /bin/sh -c "time {make} nada 'minionCache=Alias(mongo)' '_cacheGroupSize=$(_arg1)'"
+define Test(collide).exec
+  @# ASSERT: Collisions detected
+  ( ! {make} colliding >{log} 2>&1 ) $(call _!!, Did not detect collision)
+  grep -q 'Target collision' {log} $(call _!!, No collision error)
+  grep -q 'Simple(A).out = A' {log} $(call _!!, No collision description)
 endef
 
-# mongo (2000 imaginary targets) just a pawn in game of life
-mongo = CExe@mongoFiles
-mongoFiles = $(strip \
-  $(foreach a,0 1 2 3 4 5 6 7 8 9,\
-    $(foreach b,0 1 2 3 4 5 6 7 8 9,\
-      $(foreach c,0 1 2 3 4 5 6 7 8 9,\
-         source$a$b$c.c))))
-
-# Do nothing, but don't look "trivial" or else minion.mk will bypass
-# cache file generation.
-nada = Phony(nothing)
 
 #----------------------------------------------------------------
 # Demo reporting of references to automatic variables

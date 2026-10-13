@@ -35,19 +35,19 @@ Minion:
 ```console
 $ make 'CC(hello.c)'
 #-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
+gcc -c -o .out/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/hello.o.d
 
 ```
 ```console
 $ make 'CExe(CC(hello.c))'
 #-> CExe(CC(hello.c))
-gcc -o .out/CExe.o_CC.c/hello .out/CC.c/hello.o
+gcc -o .out/hello .out/hello.o
 
 ```
 ```console
 $ make 'Run(CExe(CC(hello.c)))'
 #-> Run(CExe(CC(hello.c)))
-.out/CExe.o_CC.c/hello
+.out/hello
 Hello world.
 
 ```
@@ -67,14 +67,13 @@ generate the intermediate ".o" artifact, using `CC`.
 
 ```console
 $ make 'CExe(hello.c)'
-#-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o
 
 ```
 
-This command linked the program, but did not rebuild `hello.o`.  This is
-because we have already built the inferred dependency, `CC(hello.c)`.  Doing
-nothing, whenever possible, is what a build system is all about.
+Note that this command did not rebuild anything.  This is because we have
+already built the required files in the same location and in the same way
+required for this instance.  Doing nothing, whenever possible, is what a
+build system is all about.
 
 Likewise, `Run` can also infer a `CExe` instance (which in turn will infer
 a `CC` instance):
@@ -82,7 +81,7 @@ a `CC` instance):
 ```console
 $ make 'Run(hello.c)'
 #-> Run(hello.c)
-.out/CExe.c/hello
+.out/hello
 Hello world.
 
 ```
@@ -100,7 +99,7 @@ a goal, and so on.
 ```console
 $ make 'Run(hello.c)'
 #-> Run(hello.c)
-.out/CExe.c/hello
+.out/hello
 Hello world.
 
 ```
@@ -111,7 +110,7 @@ file, so its targets are *not* phony.
 ```console
 $ make 'Exec(hello.c)'
 #-> Exec(hello.c)
-(  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
+(  .out/hello   ) > .out/hello.out || ( rm -f .out/hello.out; false )
 
 ```
 
@@ -147,9 +146,9 @@ they map to underlying Make primitives.
 $ make help 'Run(hello.c)'
 Run(hello.c) is an instance.
 
-{out} = .out/Run.c/hello.out
+{out} = .out/hello.run
 
-Command:  .out/CExe.c/hello
+Command:  .out/hello
 
 Direct dependencies:
    CExe(hello.c)
@@ -163,9 +162,9 @@ Indirect dependencies:
 $ make help 'Exec(hello.c)'
 Exec(hello.c) is an instance.
 
-{out} = .out/Exec.c/hello.out
+{out} = .out/hello.out
 
-Command: (  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
+Command: (  .out/hello   ) > .out/hello.out || ( rm -f .out/hello.out; false )
 
 Direct dependencies:
    CExe(hello.c)
@@ -187,9 +186,9 @@ expands to the words in the value of the named variable:
 ```console
 $ make 'CExe(@sources)' sources='hello.c empty.c'
 #-> CC(empty.c)
-gcc -c -o .out/CC.c/empty.o empty.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/empty.c.d
+gcc -c -o .out/empty.o empty.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/empty.o.d
 #-> CExe(@sources)
-gcc -o .out/CExe_@/sources .out/CC.c/hello.o .out/CC.c/empty.o
+gcc -o .out/sources .out/hello.o .out/empty.o
 
 ```
 
@@ -199,7 +198,7 @@ Another form, a wildcard indirection, is distinguished by the presence of a
 ```console
 $ make 'CExe(@*e*.c)'
 #-> CExe(@*e*.c)
-gcc -o .out/CExe_@/@Se@S .out/CC.c/empty.o .out/CC.c/hello.o
+gcc -o .out/_e_ .out/empty.o .out/hello.o
 
 ```
 
@@ -223,14 +222,14 @@ It expands to the following targets:
 ```console
 $ make Run@sources sources='hello.c binsort.c'
 #-> Run(hello.c)
-.out/CExe.c/hello
+.out/hello
 Hello world.
 #-> CC(binsort.c)
-gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
+gcc -c -o .out/binsort.o binsort.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/binsort.o.d
 #-> CExe(binsort.c)
-gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o
+gcc -o .out/binsort .out/binsort.o
 #-> Run(binsort.c)
-.out/CExe.c/binsort
+.out/binsort
 srch(7) = 5
 srch(6) = 9
 srch(12) = 9
@@ -284,9 +283,9 @@ include ../minion.mk
 ```console
 $ make deploy
 #-> Copy(CExe(hello.c))
-cp .out/CExe.c/hello .out/Copy/hello
+cp .out/hello .out/Copy/hello
 #-> Copy(CExe(binsort.c))
-cp .out/CExe.c/binsort .out/Copy/binsort
+cp .out/binsort .out/Copy/binsort
 
 ```
 
@@ -296,7 +295,7 @@ If no goals are provided on the command line, Minion attempts to build
 ```console
 $ make
 #-> Exec(binsort.c)
-(  .out/CExe.c/binsort   ) > .out/Exec.c/binsort.out || ( rm -f .out/Exec.c/binsort.out; false )
+(  .out/binsort   ) > .out/binsort.out || ( rm -f .out/binsort.out; false )
 
 ```
 ```console
@@ -313,11 +312,11 @@ show a couple of examples, and then dive into how and why they work.
 ```console
 $ make 'CC(hello.c).objFlags=-Os'
 #-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
+gcc -c -o .out/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/hello.o.d
 #-> CExe(hello.c)
-gcc -o .out/CExe.c/hello .out/CC.c/hello.o
+gcc -o .out/hello .out/hello.o
 #-> Exec(hello.c)
-(  .out/CExe.c/hello   ) > .out/Exec.c/hello.out || ( rm -f .out/Exec.c/hello.out; false )
+(  .out/hello   ) > .out/hello.out || ( rm -f .out/hello.out; false )
 
 ```
 
@@ -333,11 +332,11 @@ We can make this change apply more widely:
 ```console
 $ make CC.objFlags=-Os
 #-> CC(binsort.c)
-gcc -c -o .out/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/CC.c/binsort.c.d
+gcc -c -o .out/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/binsort.o.d
 #-> CExe(binsort.c)
-gcc -o .out/CExe.c/binsort .out/CC.c/binsort.o
+gcc -o .out/binsort .out/binsort.o
 #-> Exec(binsort.c)
-(  .out/CExe.c/binsort   ) > .out/Exec.c/binsort.out || ( rm -f .out/Exec.c/binsort.out; false )
+(  .out/binsort   ) > .out/binsort.out || ( rm -f .out/binsort.out; false )
 
 ```
 
@@ -493,7 +492,7 @@ CC(hello.c) inherits from: CC _CC CCBase _CCBase Builder _Builder
 
    _CCBase.command = {compiler} -c -o {@} {<} {flags} -MMD -MP -MF {depsMF}
 
-Its value is: 'gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d'
+Its value is: 'gcc -c -o .out/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/hello.o.d'
 
 
 
@@ -533,15 +532,16 @@ supported.  Instead, define your own sub-classes.
 
 ```console
 $ cp Makefile3 Makefile; diff Makefile2 Makefile3
-5a6,13
+5a6,14
 > CC.langFlags = {inherit} -Wextra
 >
 > CCg.inherit = CC
-> CCg.objFlags = -g
+> CCg.objFlags = -g {inherit}
 >
 > Sizes.inherit = Run
 > Sizes.command = wc -c {^}
 >
+> Builder.outDir = {outDirTree}
 
 ```
 
@@ -549,29 +549,8 @@ A variable assignment of the form `CLASS.inherit` specifies the base class
 from which `CLASS` inherits.  (It resembles a property definition, but
 `inherit` is a special keyword, not a property.)
 
-This makefile defines a class named `Sizes`, which inherits from `Phony`,
-which is a base class for phony targets.  Phony targets must be identified
-to Make using the special target `.PHONY: ...`, and since they have no
-output file, the recipe should not bother creating an output directory for
-them.  The `Phony` class takes care of all of this, so our subclass needs
-only to define `command`.
-
-```console
-$ make 'Sizes(CC(hello.c),CCg(hello.c))'
-#-> CC(hello.c)
-gcc -c -o .out/CC.c/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC.c/hello.c.d
-#-> CCg(hello.c)
-gcc -c -o .out/CCg.c/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/CCg.c/hello.c.d
-#-> Sizes(CC(hello.c),CCg(hello.c))
-wc -c .out/CC.c/hello.o .out/CCg.c/hello.o
-     744 .out/CC.c/hello.o
-    2120 .out/CCg.c/hello.o
-    2864 total
-
-```
-
-This makefile also defines a class named `CCg`, and defines `CCg.objFlags`
-using `{inherit}` so that it will extend, not replace, the set of flags it
+This makefile defines a class named `CCg`, and defines `CCg.objFlags` using
+`{inherit}` so that it will extend, not replace, the set of flags it
 inherits.
 
 ```console
@@ -580,13 +559,44 @@ CCg(hello.c) inherits from: CCg CC _CC CCBase _CCBase Builder _Builder
 
 {objFlags} is defined by:
 
-   CCg.objFlags = -g
+   CCg.objFlags = -g {inherit}
 
-Its value is: '-g'
+...wherein {inherit} references:
+
+   _CCBase.objFlags = -O2
+
+Its value is: '-g -O2'
 
 
 
 ```
+
+This makefile also defines a class named `Sizes`, which inherits from
+`Phony`, which is a base class for phony targets.  Phony targets must be
+identified to Make using the special target `.PHONY: ...`, and since they
+have no output file, the recipe should not bother creating an output
+directory for them.  The `Phony` class takes care of all of this, so our
+subclass needs only to define `command`.
+
+```console
+$ make 'Sizes(CC(hello.c),CCg(hello.c))'
+#-> CC(hello.c)
+gcc -c -o .out/CC/hello.o hello.c -std=c99 -O2 -Wall -Werror   -MMD -MP -MF .out/CC/hello.o.d
+#-> CCg(hello.c)
+gcc -c -o .out/CCg/hello.o hello.c -std=c99 -g -O2 -Wall -Werror   -MMD -MP -MF .out/CCg/hello.o.d
+#-> Sizes(CC(hello.c),CCg(hello.c))
+wc -c .out/CC/hello.o .out/CCg/hello.o
+     744 .out/CC/hello.o
+    2128 .out/CCg/hello.o
+    2872 total
+
+```
+
+This example does something a bit unusual -- it compiles the same source
+file two different ways within one variant build.  This is why the Makefile
+redefines `Builder.outDir` in terms of `outDirTree`.  This incorporates the
+class name into the target file path, avoiding collisions between the target
+paths of `CC(hello.c)` and `CCg(hello.c)`.
 
 
 ## Variants
@@ -689,61 +699,61 @@ defaults to the first word in `Variants.all`.
 ```console
 $ make sizes           # sizes for the default (first) variant "debug"
 #-> CC(hello.c)
-gcc -c -o .out/debug/CC.c/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/hello.c.d
+gcc -c -o .out/debug/hello.o hello.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/hello.o.d
 #-> CExe(hello.c)
-gcc -o .out/debug/CExe.c/hello .out/debug/CC.c/hello.o
+gcc -o .out/debug/hello .out/debug/hello.o
 #-> CC(binsort.c)
-gcc -c -o .out/debug/CC.c/binsort.o binsort.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/CC.c/binsort.c.d
+gcc -c -o .out/debug/binsort.o binsort.c -std=c99 -g -Wall -Werror   -MMD -MP -MF .out/debug/binsort.o.d
 #-> CExe(binsort.c)
-gcc -o .out/debug/CExe.c/binsort .out/debug/CC.c/binsort.o
+gcc -o .out/debug/binsort .out/debug/binsort.o
 #-> Sizes(CExe@sources)
-wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
-   33672 .out/debug/CExe.c/hello
-   33944 .out/debug/CExe.c/binsort
-   67616 total
+wc -c .out/debug/hello .out/debug/binsort
+   33656 .out/debug/hello
+   33944 .out/debug/binsort
+   67600 total
 
 ```
 ```console
 $ make sizes V=fast    # sizes for the "fast" variant
 #-> CC(hello.c)
-gcc -c -o .out/fast/CC.c/hello.o hello.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/hello.c.d
+gcc -c -o .out/fast/hello.o hello.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/hello.o.d
 #-> CExe(hello.c)
-gcc -o .out/fast/CExe.c/hello .out/fast/CC.c/hello.o
+gcc -o .out/fast/hello .out/fast/hello.o
 #-> CC(binsort.c)
-gcc -c -o .out/fast/CC.c/binsort.o binsort.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/CC.c/binsort.c.d
+gcc -c -o .out/fast/binsort.o binsort.c -std=c99 -O3 -Wall -Werror   -MMD -MP -MF .out/fast/binsort.o.d
 #-> CExe(binsort.c)
-gcc -o .out/fast/CExe.c/binsort .out/fast/CC.c/binsort.o
+gcc -o .out/fast/binsort .out/fast/binsort.o
 #-> Sizes(CExe@sources)
-wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
-   33432 .out/fast/CExe.c/hello
-   33464 .out/fast/CExe.c/binsort
+wc -c .out/fast/hello .out/fast/binsort
+   33432 .out/fast/hello
+   33464 .out/fast/binsort
    66896 total
 
 ```
 ```console
 $ make all-sizes       # sizes for *all* variants
 #-> Sizes(CExe@sources)
-wc -c .out/debug/CExe.c/hello .out/debug/CExe.c/binsort
-   33672 .out/debug/CExe.c/hello
-   33944 .out/debug/CExe.c/binsort
-   67616 total
+wc -c .out/debug/hello .out/debug/binsort
+   33656 .out/debug/hello
+   33944 .out/debug/binsort
+   67600 total
 #-> Sizes(CExe@sources)
-wc -c .out/fast/CExe.c/hello .out/fast/CExe.c/binsort
-   33432 .out/fast/CExe.c/hello
-   33464 .out/fast/CExe.c/binsort
+wc -c .out/fast/hello .out/fast/binsort
+   33432 .out/fast/hello
+   33464 .out/fast/binsort
    66896 total
 #-> CC(hello.c)
-gcc -c -o .out/small/CC.c/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/hello.c.d
+gcc -c -o .out/small/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/hello.o.d
 #-> CExe(hello.c)
-gcc -o .out/small/CExe.c/hello .out/small/CC.c/hello.o
+gcc -o .out/small/hello .out/small/hello.o
 #-> CC(binsort.c)
-gcc -c -o .out/small/CC.c/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/CC.c/binsort.c.d
+gcc -c -o .out/small/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/small/binsort.o.d
 #-> CExe(binsort.c)
-gcc -o .out/small/CExe.c/binsort .out/small/CC.c/binsort.o
+gcc -o .out/small/binsort .out/small/binsort.o
 #-> Sizes(CExe@sources)
-wc -c .out/small/CExe.c/hello .out/small/CExe.c/binsort
-   33432 .out/small/CExe.c/hello
-   33464 .out/small/CExe.c/binsort
+wc -c .out/small/hello .out/small/binsort
+   33432 .out/small/hello
+   33464 .out/small/binsort
    66896 total
 
 ```

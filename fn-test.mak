@@ -32,16 +32,16 @@ $(call _expectEQ,$(\s)$(\t)$(\H)$[$;$], 	#(,))
 WVAR = test
 
 define WWrule
-.out/Write/WVAR :   | 
+.out/WVAR :   | 
 	@echo '#-> Write(WVAR)'
-	@mkdir -p .out/Write/
-	@echo '_vv=.@printf !`%b!` `test` > !@.' > .out/Write/WVAR.vv
-	@printf "%b" 'test' > .out/Write/WVAR
+	@mkdir -p .out/
+	@echo '_vv=.@printf !`%b!` `test` > !@.' > .out/WVAR.vv
+	@printf "%b" 'test' > .out/WVAR
 
 _vv =
--include .out/Write/WVAR.vv
+-include .out/WVAR.vv
 ifneq "$(_vv)" ".@printf !`%b!` `test` > !@."
-  .out/Write/WVAR: .out/FORCE
+  .out/WVAR: .out/FORCE
 endif
 
 endef

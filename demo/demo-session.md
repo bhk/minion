@@ -44,9 +44,10 @@ generate the intermediate ".o" artifact, using `CC`.
 
     $ make 'CExe(hello.c)'
 
-This command linked the program, but did not rebuild `hello.o`.  This is
-because we have already built the inferred dependency, `CC(hello.c)`.  Doing
-nothing, whenever possible, is what a build system is all about.
+Note that this command did not rebuild anything.  This is because we have
+already built the required files in the same location and in the same way
+required for this instance.  Doing nothing, whenever possible, is what a
+build system is all about.
 
 Likewise, `Run` can also infer a `CExe` instance (which in turn will infer
 a `CC` instance):
@@ -256,20 +257,26 @@ A variable assignment of the form `CLASS.inherit` specifies the base class
 from which `CLASS` inherits.  (It resembles a property definition, but
 `inherit` is a special keyword, not a property.)
 
-This makefile defines a class named `Sizes`, which inherits from `Phony`,
-which is a base class for phony targets.  Phony targets must be identified
-to Make using the special target `.PHONY: ...`, and since they have no
-output file, the recipe should not bother creating an output directory for
-them.  The `Phony` class takes care of all of this, so our subclass needs
-only to define `command`.
-
-    $ make 'Sizes(CC(hello.c),CCg(hello.c))'
-
-This makefile also defines a class named `CCg`, and defines `CCg.objFlags`
-using `{inherit}` so that it will extend, not replace, the set of flags it
+This makefile defines a class named `CCg`, and defines `CCg.objFlags` using
+`{inherit}` so that it will extend, not replace, the set of flags it
 inherits.
 
     $ make help 'CCg(hello.c).objFlags'
+
+This makefile also defines a class named `Sizes`, which inherits from
+`Phony`, which is a base class for phony targets.  Phony targets must be
+identified to Make using the special target `.PHONY: ...`, and since they
+have no output file, the recipe should not bother creating an output
+directory for them.  The `Phony` class takes care of all of this, so our
+subclass needs only to define `command`.
+
+    $ make 'Sizes(CC(hello.c),CCg(hello.c))'
+
+This example does something a bit unusual -- it compiles the same source
+file two different ways within one variant build.  This is why the Makefile
+redefines `Builder.outDir` in terms of `outDirTree`.  This incorporates the
+class name into the target file path, avoiding collisions between the target
+paths of `CC(hello.c)` and `CCg(hello.c)`.
 
 
 ## Variants

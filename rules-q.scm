@@ -61,3 +61,17 @@
 (group-test "a b"      2 "<a b>")
 (group-test "a b c"    2 "<a b> <c>")
 (group-test "a b c d e f g h"  3 "<a b c> <d e f> <g h>")
+
+
+;; _noCollision
+
+(set-native "NC(a).out" "out/a")
+(set-native "NC(b).out" "out/b")
+(set-native "NC(A).out" "out/a")
+
+(expect "NC(a) NC(b)" (_noCollision "NC(a) NC(b)"))
+(expectInError (_noCollision "NC(a) NC(A)")
+               (.. "minion: Target collision; see minion.md for tips.\n\n"
+                   "    NC(a).out = out/a\n"
+                   "    NC(A).out = out/a\n"
+                   "\n"))

@@ -9,10 +9,10 @@
 
 ;; _wildcard, _shell, _var
 
-
 (define globLog &public "")
 (define shellLog &public "")
 (define varLog &public "")
+
 
 ;; Same as $(wildcard ...), but keeps a log of patterns matched.
 ;;
@@ -41,6 +41,8 @@
 
 ;; Generate a relative path from FROM to TO
 ;;
+;; FROM may not contain `..` path elements.
+;;
 (define (_relpath from to)
   &native
   (if (filter "/%" to)
@@ -53,6 +55,26 @@
                               (patsubst f1 "%" to)
                               (.. "../" to))))
               to))))
+
+
+;; Quote ARG for inclusion on the BASH command line
+;;
+(define (_shellQuote arg)
+  &native
+  (.. "'" (subst "'" "'\\''" arg) "'"))
+
+
+;; Return a shell command that will write VALUE to stdout using /bin/printf
+;;
+(define (_printfCmd value)
+  &public
+  &native
+  (define `escaped
+    (subst "\\" "\\\\"
+           "\t" "\\t"
+           "\n" "\\n"
+           value))
+  (.. "printf \"%b\" " (_shellQuote escaped)))
 
 
 ;; _unique: Return unique entries in LIST without sorting
@@ -193,14 +215,52 @@
 ;; _graphDeps, _graph, _traverse
 ;;----------------------------------------------------------------
 
-(declare (_graph fn-ch fn-names cxt nodes ?slots ?out) &native &public)
+(define `D "`")
+(define `DD (.. D D))
+(define `D_ (.. D " "))
+(define `D__ (.. D "  "))
 
-(begin
-  ;; This delimiter must not appear anywhere in node names
-  (define `D "`")
-  (define `DD (.. D D))
-  (define `D_ (.. D " "))
-  (define `D__ (.. D "  "))
+;; Remove empty slots from the *end* of SLOTS
+;;
+;; Example:
+;;    + " 9"                !a! ! ! !b! ! 9
+;;    patsubst "!" "! "     !a! !  !  !b! !  !  9
+;;    subst "!  " "!!"      !a! !!!!!b! !!!!9
+;;    filter                !a! !!!!!b!
+;;    subst "!!" "! "       !a! ! ! !b!
+;;
+(define `(trim-empties slots)
+  ;; make empty slots easy to identify
+  (define `a (patsubst D D_ (._. slots 9)))
+  ;; collapse empty slots with next slot
+  (define `b (subst D__ DD a))
+  ;; remove terminal "slot"
+  (define `c (filter-out "%9" b))
+  (subst DD D_ c))
+
+
+;; Return textual representation of all dependencies among NODES
+;;
+;; (CH-FN CXT node) -> children of node
+;; (NAME-FN CXT node) -> text to be displayed for node
+;; NODES = nodes remaining to be drawn (two lines of text per node).
+;;         This must be partially ordered (parents precede children).
+;; SLOTS = columns representing parents.
+;; OUT = previously rendered lines of text
+;;
+;; The algorithm does the following for each nod in NODES:
+;;   concatenate "sticks" and "arrows" + NODE to OUT
+;;   update SLOTS:
+;;     remove NODE from every slot's list of pending children
+;;     delete trailing empty slots
+;;   update NODE to (rest NODES)
+;;
+(define (_graph ch-fn name-fn cxt nodes ?slots ?out)
+  &native
+  &public
+  (define `node (word 1 nodes))
+  (define `children (native-call ch-fn cxt node))
+  (define `name (native-call name-fn cxt node))
 
   (define `(stick slot)
     (.. (if (filter D slot) " " "|") "  "))
@@ -210,79 +270,28 @@
         "+->"
         (stick slot)))
 
-  ;; Remove empty slots from the *end* of SLOTS
-  ;;
-  ;; Example:
-  ;;    + " 9"                !a! ! ! !b! ! 9
-  ;;    patsubst "!" "! "     !a! !  !  !b! !  !  9
-  ;;    subst "!  " "!!"      !a! !!!!!b! !!!!9
-  ;;    filter                !a! !!!!!b!
-  ;;    subst "!!" "! "       !a! ! ! !b!
-  ;;
-  (define `(trim-empties slots)
-    ;; make empty slots easy to identify
-    (define `a (patsubst D D_ (._. slots 9)))
-    ;; collapse empty slots with next slot
-    (define `b (subst D__ DD a))
-    ;; remove terminal "slot"
-    (define `c (filter-out "%9" b))
-    (subst DD D_ c))
+  ;; Add new slot containing children of NODE, and remove NODE
+  ;; from other slots.
+  (define `newSlots
+    (trim-empties
+     (._. (subst (.. D node D) D slots)
+          ;; convert list of children to slot format
+          (.. D (subst " " "" (addsuffix D children))))))
 
-  (define `(tte in out)
-    (expect (subst "!" D out) (trim-empties (subst "!" D in))))
+  (define `newOut
+    (.. out
+        (foreach (slot slots)
+          (stick slot))
+        "\n"
+        (foreach (slot slots)
+          (arrow slot node))
+        (if slots " ")
+        name "\n"))
 
-  (tte "!a! ! ! !b! ! !c! ! !"
-       "!a! ! ! !b! ! !c!")
-  (tte "!a! ! ! !b! ! !c!"
-       "!a! ! ! !b! ! !c!")
-  (tte "! ! !" nil)
-
-
-  ;; Return textual representation of all dependencies among NODES
-  ;;
-  ;; (CH-FN CXT node) -> children of node
-  ;; (NAME-FN CXT node) -> text to be displayed for node
-  ;; NODES = nodes remaining to be drawn (two lines of text per node).
-  ;;         This must be partially ordered (parents precede children).
-  ;; SLOTS = columns representing parents.
-  ;; OUT = previously rendered lines of text
-  ;;
-  ;; The algorithm does the following for each nod in NODES:
-  ;;   concatenate "sticks" and "arrows" + NODE to OUT
-  ;;   update SLOTS:
-  ;;     remove NODE from every slot's list of pending children
-  ;;     delete trailing empty slots
-  ;;   update NODE to (rest NODES)
-  ;;
-  (define (_graph ch-fn name-fn cxt nodes ?slots ?out)
-    &native
-    &public
-    (define `node (word 1 nodes))
-    (define `children (native-call ch-fn cxt node))
-    (define `name (native-call name-fn cxt node))
-
-    ;; Add new slot containing children of NODE, and remove NODE
-    ;; from other slots.
-    (define `newSlots
-      (trim-empties
-       (._. (subst (.. D node D) D slots)
-            ;; convert list of children to slot format
-            (.. D (subst " " "" (addsuffix D children))))))
-
-    (define `newOut
-      (.. out
-          (foreach (slot slots)
-            (stick slot))
-          "\n"
-          (foreach (slot slots)
-            (arrow slot node))
-          (if slots " ")
-          name "\n"))
-
-    (if nodes
-        ;; Output lines for this node.
-        (_graph ch-fn name-fn cxt (rest nodes) newSlots newOut)
-        out)))
+  (if nodes
+      ;; Output lines for this node.
+      (_graph ch-fn name-fn cxt (rest nodes) newSlots newOut)
+      out))
 
 
 ;; Return list of descendants of NODES, ordered such that all parents

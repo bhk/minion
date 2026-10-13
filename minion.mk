@@ -61,15 +61,17 @@ minionNoCache ?=
 #
 _Alias.inherit = _Goal
 _Alias.in = $($(_argText))
+_Alias.out = $(_argText)
 
 
 # _Clean(INSTANCE) : Clean INSTANCE and its direct & indirect depedencies.
 #
 _Clean.inherit = _IsPhony Builder
-	_Clean.ids = $(filter %$],$(call _expand,$(_args)))
+_Clean.ids = $(filter %$],$(call _expand,$(_args)))
 _Clean.in = $(patsubst %,Clean(%),{{ids}.needs})
 _Clean.command = $(foreach i,{ids},\
   $(if $(call _hasProperty,cleanCommand,$i),{$i.cleanCommand},rm -f {$i.out}))
+_Clean.outExt = %.clean
 
 
 # Variants(TARGETS) : Build {all} variants of TARGETS.  Each variant
@@ -96,6 +98,7 @@ _Phony.inherit = _IsPhony Builder
 _Phony.command = @true
 _Phony.message =
 _Phony.in =
+_Phony.outName = $(or $(call _namedArg1,name),$(call _fsClean,{}))
 
 
 # _IsPhony : Mixin that defines properties as appropriate for all phony
@@ -103,7 +106,7 @@ _Phony.in =
 #
 _IsPhony.rule = .PHONY: {@}$(\n){inherit}
 _IsPhony.mkdirs = # not a real file => no need to create directory
-_IsPhony.vvFile = # always runs => no point in validating
+_IsPhony.vvFile = # not a real file => nothing to validate
 _IsPhony.cleanCommand = # nothing to do
 
 
@@ -118,7 +121,7 @@ _IsPhony.cleanCommand = # nothing to do
 _CCBase.inherit = Builder
 _CCBase.outExt = .o
 _CCBase.command = {compiler} -c -o {@} {<} {flags} -MMD -MP -MF {depsMF}
-_CCBase.depsMF = {outBasis}.d
+_CCBase.depsMF = {@}.d
 _CCBase.flags = {stdFlags} {objFlags} {srcFlags} {libFlags} $(addprefix -I,{includes})
 _CCBase.stdFlags =
 _CCBase.objFlags = -O2
@@ -163,12 +166,11 @@ _CExe++.compiler = g++
 _CExe++.inferClasses = CC.c CC++.cpp CC++.cc
 
 
-# Exec(COMMAND) : Run a command, capturing what it writes to stdout.
+# Exec(EXE) : Invoke an executable, capturing what it writes to stdout.
 #
-#    By default, the first ingredient is an executable or shell command, and
-#    it is passed as arguments the {execArgs} property and all other
-#    ingredients.  Override {exec} to change what is to be executed while
-#    retaining other behavior.
+#    By default, the first ingredient is an executable program.  {exec}
+#    and {execArgs} can be overridden to customize behavior (see their
+#    definitions, below).
 #
 #    Note: If you override {exec} such that {<} is not the executable, then
 #    you should also probably override {inferClasses}.
@@ -177,23 +179,24 @@ _Exec.inherit = Builder
 _Exec.command = ( {exportPrefix} {exec} ) > {@} || ( rm -f {@}; false )
 _Exec.exec = {<} {execArgs} $(wordlist 2,9999,{^})
 _Exec.execArgs =
-_Exec.outExt = .out
+_Exec.outExt = %.out
 # Infer only makes sense for the first item, the one whose type we know.
 _Exec.inIDs = $(call _inferIDs,$(word 1,{inX}),{inferClasses}) $(wordlist 2,999999,{inX})
 _Exec.inferClasses = CExe.c CExe++.cpp CExe++.cc
 
 
-# Test(COMMAND) : Run a command (as per Exec) updating an OK file on success.
+# Test(EXE) : Invoke a program, as per Exec, updating an OK file on success.
 #
 _Test.inherit = Exec
 _Test.command = {exportPrefix} {exec}$(\n)touch {@}
-_Test.outExt = .ok
+_Test.outExt = %.ok
 
 
-# Run(COMMAND) : run command (as per Exec).
+# Run(EXE) : run a program (as per Exec).
 #
 _Run.inherit = _IsPhony Exec
 _Run.command = {exportPrefix} {exec}
+_Run.outExt = %.run
 
 
 # Copy(INPUT)
@@ -205,8 +208,11 @@ _Run.command = {exportPrefix} {exec}
 #   DIR, when provided, gives the destination directory.
 #   Otherwise, $(VOUTDIR)$(_class) is the destination directory.
 #
+#   One use case is creating a subclass for a deployment directory.
+#   `SUBCLASS@FILES` constructs instances required to deploy $(FILES) to a
+#   directory names SUBCLASS.
+#
 _Copy.inherit = Builder
-_Copy.out = $(or $(call _namedArg1,out),{inherit})
 _Copy.outDir = $(or $(call _namedArg1,dir),$(VOUTDIR)$(_class)/)
 _Copy.command = cp {<} {@}
 
@@ -226,14 +232,12 @@ _GZip.outExt = %.gz
 
 
 # Write(VAR)
-# Write(VAR,out:OUT)
 #
 #   Write the value of a variable to a file.
 #
 _Write.inherit = Builder
-_Write.out = $(or $(call _namedArg1,out),{inherit})
 _Write.command = @$(call _printfCmd,{data}) > {@}
-_Write.data = $(or $(call _namedArg1,data),$($(_arg1)))
+_Write.data = $($(_arg1))
 _Write.in =
 
 
@@ -256,7 +260,7 @@ _Graph_getName = $(patsubst Alias(%),%,$2)
 
 # Core builder properties
 _Builder.needs = {inIDs} {upIDs} {depsIDs} {ooIDs}
-_Builder.out = {outDir}{outName}
+_Builder.out = $(or $(call _namedArg1,out),{outDir}{outName})
 
 define _Builder.rule
 {@} : {^} $(call get,out,{upIDs} {depsIDs}) | {{ooIDs}.out}
@@ -314,13 +318,13 @@ _Builder.deps^ = {{depsIDs}.out}
 # inferClasses: a list of CLASS.EXT patterns
 _Builder.inferClasses =
 
+_Builder.outName = $(or $(call _namedArg1,name),$(call _outName,$(_arg1),{outExt}))
 _Builder.outExt = %
-_Builder.outDir = $(dir {outBasis})
-_Builder.outName = $(foreach e,$(notdir {outBasis}),$(basename $e)$(subst %,$(suffix $e),{outExt}))
-_Builder.outBasis = $(VOUTDIR)$(call _outBasis,$(_class),$(_argText),{outExt},$(call get,out,$(filter $(_arg1),$(word 1,{inX}))),$(_arg1))
+_Builder.outDir = $(or $(call _namedArg1,dir),$(VOUTDIR))
+_Builder.outDirTree = $(or $(call _namedArg1,dir),$(call _outDirTree,$(_arg1)))
 
 # message to be displayed when the command executes (if non-empty)
-_Builder.message ?= \#-> $(_self)
+_Builder.message = \#-> $(_self)
 
 # directories to be created prior to commands in recipe
 _Builder.mkdirs = $(sort $(dir {@} {vvFile}))
@@ -331,7 +335,7 @@ _Builder.exportPrefix = $(foreach v,{exports},$v=$(call _shellQuote,{$v}) )
 _Builder.exports =
 
 # Validity values
-_Builder.vvFile ?= {outBasis}.vv
+_Builder.vvFile = {@}.vv
 # Use $(basename {@}) to match most of {@} and also {depsMF} as defined for CCBase
 _Builder.vvValue = $(call _vvEnc,{command},$(basename {@}))
 
@@ -409,7 +413,7 @@ endef
 _safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
 
 define _helpMessage
-Minion v1.1 usage:
+Minion v1.2b1 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals
@@ -542,11 +546,11 @@ _eq? = $(findstring $(subst $20,1,$10),1)
 _error = $(error $1)
 _escape = $(subst $;,$$;,$(subst $[,$$[,$(subst $],$$],$(subst $$,$$$$,$1))))
 _eval = $(eval $1)
-_evalRules = $(foreach w,$(call _rollupEx,$(sort $(_isInstance)),$2),$(call _eval,$(call get,rule,$w),$w))
+_evalRules = $(foreach w,$(call _noCollision,$(call _rollupEx,$(sort $(_isInstance)),$2)),$(call _eval,$(call get,rule,$w),$w))
 _expand = $(call _expandX,$1,$(_self).$2)
 _expandX = $(foreach w,$1,$(or $(filter %$],$w),$(if $(findstring @,$w),$(foreach x,$(or $(call _ivar,$w),=@),$(patsubst %,$(if $(filter @%,$w),%,$(subst $(\s),,$(filter %( %% ),$(subst @,$[ ,$w) % $(subst @, $] ,$w)))),$(if $(findstring *,$x),$(call _wildcard,$x),$(if $(filter u%,$(flavor $x)),$(call _EI,$w,$2),$(call _expandX,$($x),$x))))),$(or $(if $(filter f% o%,$(origin $w)),Alias($w)),$w))))
 _fmtList = $(if $(word 1,$1),$(subst $(\s),$(\n)   , $(strip $1)),none)
-_fsenc = $(subst },@R,$(subst {,@L,$(subst >,@r,$(subst <,@l,$(subst /,@D,$(subst ~,@T,$(subst !,@B,$(subst :,@C,$(subst *,@S,$(subst $],@-,$(subst $[,@+,$(subst |,@1,$(subst @,@_,$1)))))))))))))
+_fsClean = $(subst /,-,$(subst *,-,$(subst :,-,$(subst ~,-,$(subst $;,-,$(subst $[,_,$(subst $],,$1)))))))
 _fset = $(eval $$1 = $(if $(filter 1,$(word 1,1$20)),$$(or ))$(subst \#,$$(\H),$(subst $(\n),$$(\n),$2)))$1
 _fswap = $(if $(_fset),)$3
 _graph = $(if $4,$(call _graph,$1,$2,$3,$(wordlist 2,99999999,$4),$(subst ``,` ,$(filter-out %9,$(subst `  ,``,$(patsubst `,` ,$(subst `$(word 1,$4)`,`,$5) `$(subst $(\s),,$(addsuffix `,$(call $1,$3,$(word 1,$4)))) 9)))),$6$(foreach w,$5,$(if $(filter `,$w), ,|)  )$(\n)$(foreach w,$5,$(if $(findstring `$(word 1,$4)`,$w),+->,$(if $(filter `,$w), ,|)  ))$(if $5, )$(call $2,$3,$(word 1,$4))$(\n)),$6)
@@ -575,9 +579,10 @@ _ivar = $(filter-out %@,$(subst @,@ ,$1))
 _lazy = $(subst $$,$(\e),$1)
 _namedArg1 = $(word 1,$(_namedArgs))
 _namedArgs = $(call _hashGet,$(call _argHash,$(patsubst $(_class)(%),%,$(_self))),$1)
-_outBS = $(_fsenc)$(if $(findstring %,$3),,$(suffix $4))$(if $4,$(patsubst _/$(VOUTDIR)%,_%,$(if $(filter %$],$2),_)$(subst //,/_root_/,$(subst //,/,$(subst /../,/_../,$(subst /./,/_./,$(subst /_,/__,$(subst /,//,/$4))))))),$(call _outBX,$2))
-_outBX = $(subst @D,/,$(subst $(\s),,$(patsubst /%@_,_%@,$(addprefix /,$(subst @_,@_ ,$(_fsenc))))))
-_outBasis = $(if $(filter $5,$2),$(_outBS),$(call _outBS,$1$(subst _$(or $5,|),_|,_$2),$(or $5,out),$3,$4))
+_noCollision = $(call _noCollision2,$1,$(sort $(foreach w,$(patsubst ./%,%,$(call get,out,$1)),$(word 2,$(filter $w,$(patsubst ./%,%,$(call get,out,$1)))))))
+_noCollision2 = $(if $2,$(call _error,$(subst $(\n) $(\n),$(\n),minion: Target collision; see minion.md for tips.$(\n)$(foreach w,$2,$(foreach x,$(foreach x,$1,$(if $(filter $w,$(patsubst ./%,%,$(call get,out,$x))),$x)),$(\n)    $x.out = $(call get,out,$x)$(\n))$(\n)))),$1)
+_outDirTree = $(subst /$(VOUTDIR),_,$(subst //,/_root_/,$(subst //,/,$(subst /../,/_../,$(subst /./,,$(subst /_,/__,$(subst /,//,$(VOUTDIR)$(_class)/$(dir $(if $(filter $1,$(call .,in)),$(if $(_isIndirect),,$(call .,<)),$(if $(filter %$],$1),$(call get,out,$1)))))))))))
+_outName = $(foreach w,$(word 1,$(or $(notdir $(if $(filter $1,$(call .,in)),$(if $(_isIndirect),$(subst *,_,$(subst ~,_,$(subst @,-,$(patsubst @%,%,$1)))),$(call .,<)),$(if $(filter %$],$1),$(call get,out,$1),$1))),$(_class))),$(or $(basename $w),$(_class))$(subst %,$(suffix $w),$2))
 _printfCmd = printf "%b" $(call _shellQuote,$(subst $(\n),\n,$(subst $(\t),\t,$(subst \,\\,$1))))
 _qesc = $(subst $(\n),$$($(\n)),$(subst \#,$$(\H),$(subst ",$$(\q),$(subst $$,$$$$,$1))))
 _qv = $(call _qvn,$1,')
@@ -588,7 +593,7 @@ _relpath = $(if $(filter /%,$2),$2,$(if $(filter ..,$(subst /, ,$1)),$(error _re
 _rollup = $(sort $(foreach w,$(filter %$],$1),$w $(call _rollupOne,$w)))
 _rollupEx = $(if $1,$(call _rollupEx,$(filter-out $3 $1,$(sort $(filter %$],$(call get,needs,$(filter-out $2,$1))) $(foreach w,$(filter $2,$1),$(value *D-$w)))),$2,$3 $1),$(filter-out $2,$3))
 _rollupOne = $(or $(value *n$1),$(call _set,*n$1,$(or $(sort $(foreach w,$(filter %$],$(call get,needs,$1)),$w $(call _rollupOne,$w))),$(if ,, ))))
-_rulecacheRecipe = $(info minion: Updating rule cache...)$(call _rcr2,$1,$(call _rollup,$(call _varToIDs,minionCache)),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
+_rulecacheRecipe = $(info minion: Updating rule cache...)$(call _rcr2,$1,$(call _noCollision,$(call _rollup,$(call _varToIDs,minionCache))),$(filter %$],$(call _varToIDs,minionNoCache)),$(_cacheGroupSize))
 _set = $(eval $$1 := $$2)$2
 _shell = $(if $(call _set,'shellLog,$(sort $('shellLog) $(subst $(\s),!0,$(subst $(\t),!+,$(subst !,!1,$1))))),)$(shell $1)
 _shellQuote = '$(subst ','\'',$1)'

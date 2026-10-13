@@ -39,6 +39,17 @@
       (filter-out "%)" id)))
 
 
+;; Return the variable portion of indirection ID.  Return nil if the ID ends
+;; in @.
+;;
+;;    @VAR, C@VAR, D@C@VAR  -->  VAR, VAR, VAR
+;;
+(define (_ivar id)
+  &native
+  &public
+  (filter-out "%@" (subst "@" "@ " id)))
+
+
 ;; Return the alias instance if NAME is a variable name.
 ;;
 (define `(isAlias id)
@@ -239,6 +250,7 @@
 ;;    to a quirk of Make.
 ;;
 (define (. p ?caller)
+  &public
   &native
 
   (define `I.P (.. _self "." p))
@@ -280,25 +292,29 @@
 
 (define (_argText)
   &native
+  &public
   argText)
 (declare _argText &native) ;; re-define so it can be referenced as a variable
 
 (define (_args)
   &native
+  &public
   (_hashGet (_argHash argText)))
 (declare _args &native)
 
 (define (_arg1)
   &native
+  &public
   (word 1 _args))
-(declare _arg1 &native)
 
 (define (_namedArgs key)
   &native
+  &public
   (_hashGet (_argHash argText) key))
 
 (define (_namedArg1 key)
   &native
+  &public
   (word 1 (_namedArgs key)))
 
 

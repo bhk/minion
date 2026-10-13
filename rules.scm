@@ -6,20 +6,48 @@
 
 
 ;;----------------------------------------------------------------
-;; Rule-generation
+;; Target collision detection
 ;;----------------------------------------------------------------
 
 
-;; Return the variable portion of indirection ID.  Return nil if the ID ends
-;; in @.
-;;
-;;    @VAR, C@VAR, D@C@VAR  -->  VAR, VAR, VAR
-;;
-(define (_ivar id)
+(define (_noCollision2 ids dupsOut)
   &native
-  &public
-  (filter-out "%@" (subst "@" "@ " id)))
+  (define `(outToIDs out)
+    (foreach (id ids)
+      (if (filter out (patsubst "./%" "%" (get "out" id)))
+          id)))
 
+  (define `message
+    (.. "minion: Target collision; see minion.md for tips.\n"
+        (foreach (out dupsOut)
+          (.. (foreach (id (outToIDs out))
+                (.. "\n    " id ".out = " (get "out" id) "\n"))
+              "\n"))))
+
+  (if dupsOut
+      (_error (subst "\n \n" "\n" message))
+      ids))
+
+
+;; Ensure that output files for IDS do not collide.  If there is a
+;; collision, throw an error.  Otherwise, return IDS.
+;;
+(define (_noCollision ids)
+  &native
+
+  ;; Return duplicated items in LIST.  This simple version is O(N^2), but very
+  ;; fast on small lists (<1ms for 200 items on a 2023 laptop).
+  (define `(dups list)
+    (sort
+     (foreach (w list)
+       (word 2 (filter w list)))))
+
+  (_noCollision2 ids (dups (patsubst "./%" "%" (get "out" ids)))))
+
+
+;;----------------------------------------------------------------
+;; Indirection expansion
+;;----------------------------------------------------------------
 
 (define (_EI id where)
   &native
@@ -78,30 +106,6 @@
   &native
   &public
   (_expandX list (.. _self "." prop)))
-
-
-;;----------------------------------------------------------------
-;; Shell- and command-related tools
-;;----------------------------------------------------------------
-
-;; Quote ARG for inclusion on the BASH command line
-;;
-(define (_shellQuote arg)
-  &native
-  (.. "'" (subst "'" "'\\''" arg) "'"))
-
-
-;; Return a shell command that will write VALUE to stdout using /bin/printf
-;;
-(define (_printfCmd value)
-  &public
-  &native
-  (define `escaped
-    (subst "\\" "\\\\"
-           "\t" "\\t"
-           "\n" "\\n"
-           value))
-  (.. "printf \"%b\" " (_shellQuote escaped)))
 
 
 ;;----------------------------------------------------------------
@@ -305,7 +309,7 @@
   &public
 
   (declare _cacheGroupSize &native)
-  (define `includes (_rollup (_varToIDs "minionCache")))
+  (define `includes (_noCollision (_rollup (_varToIDs "minionCache"))))
   (define `excludes (filter "%)" (_varToIDs "minionNoCache")))
 
   (print "minion: Updating rule cache...")
@@ -316,5 +320,5 @@
 ;;
 (define (_evalRules ids excludes)
   &native
-  (foreach (id (_rollupEx (sort (_isInstance ids)) excludes))
+  (foreach (id (_noCollision (_rollupEx (sort (_isInstance ids)) excludes)))
     (_eval (get "rule" id) id)))

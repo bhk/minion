@@ -74,6 +74,17 @@
 (expect (_relpath "a/b/c"
                   "a/x/y") "../x/y")
 
+;; trim-empties
+
+(define `(tte in out)
+  (expect (subst "!" D out) (trim-empties (subst "!" D in))))
+
+(tte "!a! ! ! !b! ! !c! ! !"
+     "!a! ! ! !b! ! !c!")
+(tte "!a! ! ! !b! ! !c!"
+     "!a! ! ! !b! ! !c!")
+(tte "! ! !" nil)
+
 ;; _graph
 
   (define `test-graph
