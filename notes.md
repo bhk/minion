@@ -1,11 +1,5 @@
 # Notes
 
-## Minion TODO
-
- - `make 'C(A).P'` : Compute and output property, like `make help 'C(A).P'`
-   but without any extraneous text.
-
-
 ## Design Notes
 
 ### How Minion Works
@@ -163,75 +157,29 @@ Complications:
 ### Rewrites
 
 Can we define a class in terms of another?  Say we want to define `Foo(A)`
-as `Bar(A,arg=X)`.  To avoid conflicts, these instance names will need to
-have different output files, which means that `Foo(A)` will place the result
-at a different location from `Bar(A,arg=X)`, or copy it.
+as `Bar(A,arg:X)`.  *Not* as a subclass, but as some arbitrary re-writing of
+the arguments.  Another example would be a different way to handle
+inference: CExe(a.c) -> CExe(CC(a.c)).  Some options:
 
-    Foo.inherit = Rewrite
-    Foo.in = Bar($(_arg1),arg=X)
+ 1. The first instance could yield a *copy* of the output of the second.
 
-However, here `Foo` is not a sub-class of `Bar`, so properties attached to
-instances or subclasses of `Foo` will not affect `Bar`.  `Foo` will have to
-expose its own interface for extension, which will probably be limited.
+ 2. The first instance can emit an empty {rule}.  {out} would be the same as
+    the second instance, and {needs} would be simply the second instance.
 
+        Foo.inherit = Rewrite
+        Foo.needs = Bar($(_arg1),arg:X)
+        Rewrite.out = {{needs}.out}
+        Rewrite.rule = #
 
-### make C(A).P
+These run afoul of target collision in different ways.
 
-Instead of a special syntax, use a custom class: PrintProp(C(A).P) (to
-echo to stdout) or Prop(C(A).P) (to write to file).
+Worse is the interaction with subclassing.  Overriding `Foo(A).prop` will
+not affect the rule in the way intended. `Bar(A,arg:X).prop` would be
+required.  Having `Foo(A)` inherit directly from `Bar(A,arg:X)` might solve
+*that* problem.
 
-    Prop.inherit = Write
-    Prop.data = $(call get,$(_propArgProp),$(_propArgID))
-
-
-### Aliases in Target Lists
-
-Aliases are currently excluded from {in}, {up}, {deps}.
-
-There is a potential ambiguity between "alias name" and "file name", but
-that already exists in Make's goal processing, and with Minion only *source*
-file names will appear in ingredient lists.
-
-To summarize:
-
-    goals, cache, oo     PLAIN | C(A) | *VAR | ALIAS
-    in, up               PLAIN | C(A) | *VAR
-    get, needs, rollup   PLAIN | C(A)                  (non-user-facing)
-    out, <, ^, up^       PLAIN
-
-The following change would simplify documentation:
-
-    goals, cache, oo, in, up, deps  PLAIN | C(A) | *VAR | ALIAS
-    get, needs, rollup              PLAIN | C(A)        (non-user-facing)
-    out, <, ^, up^                  PLAIN
-
-This involves only a change to `_expand`, which is called many times, and on
-occasions when order must be preserved, so performance is a concern.  Some
-benchmarking in a large project is in order.  Performance observations so
-far:
-
-  * The argument to _expand is often empty (~46%).
-  * When not empty, it usually has one element. (~42%)
-  * Usually it has no "*" and no alias name, and can return its input.
-
-    (define (_expand names)
-      (if names
-        (if (or (findstring "@" names)
-                (filter _aliases names))
-          (call _ex,names) ;; $(_ex)
-          names)))
-
-
-### "Compress" recipe?
-
-We could post-process the recipe to take advantage of $@, $(@D), $<, $^,
-$(word 2,$^), ...  [$(@D) fails for files with spaces...]
-
-Or we could directly emit $(@D) for mkdir command, $@ for {@}, $< for {<}
-(when non-empty)
-
-Also: we could use a temporary variable to reduce repetition of the target
-name within `rule` (in the Make rule, .PHONY)
+I see no compelling case were subclassing cannot accomplish the same goal as
+easily.
 
 
 ### More optimization possibilities
@@ -243,16 +191,16 @@ name within `rule` (in the Make rule, .PHONY)
    _rollups encounters a cached ID.
 
    This avoids the time spent loading the cached makefile (and the dep and
-   vv files) (maybe 100ms in med-sized project), when (A) restart will occur
+   vv files) (maybe 100ms in a large project), when (A) restart will occur
    due to stale cache, (B) the goals are non-trivial yet are entirely
    outside the cache.
 
 ### Possible Arg Syntax
 
-    $(_args)                -->  {:*}
-    $(_arg1)                -->  {:1}
-    $(call _nameArgs,NAME)  -->  {NAME:*}
-    $(call _nameArg1,NAME)  -->  {NAME:1}
+    $(_args)                -->  {::*}
+    $(_arg1)                -->  {::1}
+    $(call _nameArgs,NAME)  -->  {:NAME:*}
+    $(call _nameArg1,NAME)  -->  {:NAME:1}
 
 
 ### Other optimizations

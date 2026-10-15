@@ -21,6 +21,7 @@ Copy.inherit ?= _Copy
 Exec.inherit ?= _Exec
 GZip.inherit ?= _GZip
 Graph.inherit ?= _Graph
+IsPhony.inherit ?= _IsPhony
 Link.inherit ?= _Link
 Phony.inherit ?= _Phony
 Print.inherit ?= _Print
@@ -66,7 +67,7 @@ _Alias.out = $(_argText)
 
 # _Clean(INSTANCE) : Clean INSTANCE and its direct & indirect depedencies.
 #
-_Clean.inherit = _IsPhony Builder
+_Clean.inherit = IsPhony Builder
 _Clean.ids = $(filter %$],$(call _expand,$(_args)))
 _Clean.in = $(patsubst %,Clean(%),{{ids}.needs})
 _Clean.command = $(foreach i,{ids},\
@@ -87,14 +88,20 @@ _Variant.inherit = Phony
 _Variant.command = @$(MAKE) -f $(word 1,$(MAKEFILE_LIST)) --no-print-directory $(foreach t,$(_args),$(call _shellQuote,$t)) V=$(call _shellQuote,$(call _namedArg1,V))
 
 
-# Phony(PREREQS) : Generate a phony rule.
+# Phony(ARGS) : Generate a phony rule.
 #
 #   A phony rule does not generate an output file.  Therefore, Make cannot
 #   determine whether its result is "new" or "old", so it is always
 #   considered "old", and its recipe will be executed whenever it is listed
 #   as a target.
 #
-_Phony.inherit = _IsPhony Builder
+#   The `Phony` class, furthermore, is ideal for when the ARGS does not name
+#   input files (and the instance simply describes a command shorthand).
+#
+#   The `IsPhony` mixin is better suited for instances that do process
+#   inputs but do not generate an output file.
+#
+_Phony.inherit = IsPhony Builder
 _Phony.command = @true
 _Phony.message =
 _Phony.in =
@@ -176,7 +183,7 @@ _CExe++.inferClasses = CC.c CC++.cpp CC++.cc
 #    you should also probably override {inferClasses}.
 #
 _Exec.inherit = Builder
-_Exec.command = ( {exportPrefix} {exec} ) > {@} || ( rm -f {@}; false )
+_Exec.command = {exportPrefix} {exec} > {@}.tmp$(\n)mv {@}.tmp {@}
 _Exec.exec = {<} {execArgs} $(wordlist 2,9999,{^})
 _Exec.execArgs =
 _Exec.outExt = %.out
@@ -194,7 +201,7 @@ _Test.outExt = %.ok
 
 # Run(EXE) : run a program (as per Exec).
 #
-_Run.inherit = _IsPhony Exec
+_Run.inherit = IsPhony Exec
 _Run.command = {exportPrefix} {exec}
 _Run.outExt = %.run
 
@@ -243,11 +250,10 @@ _Write.in =
 
 # Graph(GOALS) : Draw a graph of dependencies of instances
 #
-_Graph.inherit = Builder
-_Graph.needs =
+_Graph.inherit = Phony
 _Graph.rule = {@}: ; @true $$(info $$(call get,text,$(call _escape,$(_self))))
 _Graph.text = $(call _graphDeps,_Graph_getNeeds,{nodeNameFn},{prune},{roots})
-_Graph.roots = $(call _Graph_filter,{prune},{inX})
+_Graph.roots = $(call _Graph_filter,{prune},$(call _expand,$(_args)))
 _Graph.prune =
 _Graph.nodeNameFn = _Graph_getName
 
@@ -413,7 +419,7 @@ endef
 _safeToClean = $(if $(filter-out . ..,$(subst /, ,$1)),$1)
 
 define _helpMessage
-Minion v1.2b1 usage:
+Minion v1.2 usage:
 
    make                     Build the target named "default"
    make GOALS...            Build the named goals

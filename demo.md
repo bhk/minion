@@ -110,7 +110,8 @@ file, so its targets are *not* phony.
 ```console
 $ make 'Exec(hello.c)'
 #-> Exec(hello.c)
-(  .out/hello   ) > .out/hello.out || ( rm -f .out/hello.out; false )
+.out/hello   > .out/hello.out.tmp
+mv .out/hello.out.tmp .out/hello.out
 
 ```
 
@@ -164,7 +165,9 @@ Exec(hello.c) is an instance.
 
 {out} = .out/hello.out
 
-Command: (  .out/hello   ) > .out/hello.out || ( rm -f .out/hello.out; false )
+Command:
+  |  .out/hello   > .out/hello.out.tmp
+  | mv .out/hello.out.tmp .out/hello.out
 
 Direct dependencies:
    CExe(hello.c)
@@ -295,7 +298,8 @@ If no goals are provided on the command line, Minion attempts to build
 ```console
 $ make
 #-> Exec(binsort.c)
-(  .out/binsort   ) > .out/binsort.out || ( rm -f .out/binsort.out; false )
+.out/binsort   > .out/binsort.out.tmp
+mv .out/binsort.out.tmp .out/binsort.out
 
 ```
 ```console
@@ -316,7 +320,8 @@ gcc -c -o .out/hello.o hello.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .out/he
 #-> CExe(hello.c)
 gcc -o .out/hello .out/hello.o
 #-> Exec(hello.c)
-(  .out/hello   ) > .out/hello.out || ( rm -f .out/hello.out; false )
+.out/hello   > .out/hello.out.tmp
+mv .out/hello.out.tmp .out/hello.out
 
 ```
 
@@ -336,7 +341,8 @@ gcc -c -o .out/binsort.o binsort.c -std=c99 -Os -Wall -Werror   -MMD -MP -MF .ou
 #-> CExe(binsort.c)
 gcc -o .out/binsort .out/binsort.o
 #-> Exec(binsort.c)
-(  .out/binsort   ) > .out/binsort.out || ( rm -f .out/binsort.out; false )
+.out/binsort   > .out/binsort.out.tmp
+mv .out/binsort.out.tmp .out/binsort.out
 
 ```
 

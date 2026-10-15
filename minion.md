@@ -193,16 +193,17 @@ also use the following Minion-specific syntax constructs:
 
  * `${` and `$}` expand to `{` and `}`.  Additionally, when an
    opening/closing brace is immediately followed/preceded by a space
-   character, they are not treated as special characters.  For example, `{
+   character, it is not treated as a special character.  For example, `{
    echo hi }` is not treated as Minion expression.
 
 When a property definition expands a variable with `$(VAR)` or `$(call
 VAR)`, that referenced variable can make use of Minion-provided functions,
 and the notion of "current instance" still applies during the expansion of
-that variable.  However, Minion property *syntax* -- `{PROP} -- is available
-only within property definition variables such as `Class(Arg).prop` or
-`Class.prop`; it does not apply to variables evaluated with `$(VAR)` or
-`$(call VAR,...)`.
+that variable.  However, Minion-specific *syntax*, such as `{PROP}`, is
+available only within property definitions -- i.e. definitions attached to
+variables such as `Class(Arg).prop` or `Class.prop` that are evaluated
+during property evaluation -- and does not apply to variables directly
+expanded with `$(VAR)` or `$(call VAR,...)`.
 
 Minion uses memoization, so property definitions are compiled at most once,
 and values of properties of an instance are computed at most once.
@@ -271,7 +272,7 @@ necessary to define an ordinary Make target.  Builder provides a definition
 that insulates most subclasses from many peculiarities of Make.  Subclasses
 can customize behavior by defining the following:
 
- * `{command}`: (see [below](#builder.command))
+ * `{command}`: (see [below](#buildercommand))
  * `{message}`: (see minion.mk)
  * `{mkDirs}` : (see minion.mk)
  * `{vvFile}`: (see [below](#validity-values))
@@ -281,19 +282,19 @@ can customize behavior by defining the following:
 Builder divides `{needs}` into different sub-categories, each specified in a
 different property:
 
- - [{in}](#buider.in): Dependencies whose output files will appear in `{^}`.
+ - [{in}](#builderin): Dependencies whose output files will appear in `{^}`.
    This typically is used for files that will appear on the command line as
    arguments.
 
- - [{up}](#builder.up): Dependencies whose output files will appear in
+ - [{up}](#builderup): Dependencies whose output files will appear in
    `{up^}`.  This is typically used for files that will appear on the
    command line as an invoked command or within a special option passed to
    the command.
 
- - [{oo}](#builder.oo): Out-of-order dependencies.  These generally do not
+ - [{oo}](#builderoo): Out-of-order dependencies.  These generally do not
    appear on the command line.
 
- - [{deps}](#builder.deps): Other dependencies for which it would be
+ - [{deps}](#builderdeps): Other dependencies for which it would be
    convenient to exclude from the above categories.
 
 These definitions are necessarily a bit general and abstract, since we are
@@ -440,7 +441,7 @@ The definition supplied by `Builder.in`, is `$(_args)`: all unnamed instance
 arguments.  Some subclasses define `{in}` differently.
 
 Expansion of [indirections](#indirections) and
-[inference](#builder.inferclasses) of intermediate targets is performed to
+[inference](#builderinferClasses) of intermediate targets is performed to
 generate `{inIDs}`, which is a list of target IDs.  These are in turn
 translated to file names -- each instance is replaced with its `{out}`
 property -- to generate `{^}`, which can be used to construct the command
@@ -461,7 +462,7 @@ as in:
 ### `Builder.up`
 
 The value of `{up}` is a list of inputs, as described for the
-[`in`](#builder.in) property.
+[`in`](#builderin) property.
 
 An instance may have dependencies that are not specified by the user via
 arguments or the `in` property, and instead are built into the definition of
@@ -478,7 +479,7 @@ contains the files corresponding to those target IDs.
 
 Builder treats `{oo}` as a list of order-only dependencies (OO-deps).  It is
 a list of words that will expand to target IDs, similarly to how
-[`{in}`](#builder.in) is treated, except that plain alias names are
+[`{in}`](#builderin) is treated, except that plain alias names are
 acceptable here.
 
 The file output by an OO-dep, if there is one, is not a direct dependency of
@@ -919,15 +920,12 @@ The following BNF describes target names:
     Arg       := ( Name `:` )? Value
     Value     := ( ValueChar+ | '(' ArgList ')' )*
     Name      := NameChar+
-    Property  := PropChar+
 
 These definitions rely on the following character classes:
 
     ClassChar:  A-Z a-z 0-9 _ - +
     NameChar:   A-Z a-z 0-9 _ - + . @ , /
-    PropChar:   A-Z a-z 0-9 _ - +   @ , / ^ ~ < >
     ValueChar:  A-Z a-z 0-9 _ - + . @ , /   ~     *
-
 
 Note that an argument list contains zero or more arguments, and each
 argument must contain at least one character.  Each argument may contain
@@ -951,7 +949,7 @@ following:
 The following shell-unsafe characters may appear in instances or
 indirections:
 
-    ( ) < > { } : ! * ~ < >
+    ( ) : * ~
 
 Instances generally do not appear as targets and prerequisites in Make
 rules, and they are not passed to the shell as file names.  When Minion
